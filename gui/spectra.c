@@ -26,12 +26,17 @@
 #include "lv2/lv2plug.in/ns/extensions/ui/ui.h"
 #include "../src/uris.h"
 
+#include "fft.c"
+
 #ifndef MIN
 #define MIN(A,B) ( (A) < (B) ? (A) : (B) )
 #endif
 #ifndef MAX
 #define MAX(A,B) ( (A) > (B) ? (A) : (B) )
 #endif
+
+#define WWIDTH (840)
+#define WHEIGHT_PW (400)
 
 typedef struct {
   LV2_Atom_Forge forge;
@@ -41,14 +46,115 @@ typedef struct {
   LV2UI_Write_Function write;
   LV2UI_Controller controller;
 
-  RobWidget *hbox;
-  RobTkLbl  *lbl_test;
+  RobWidget *vbox;
+  RobTkXYp  *xyp;
+  cairo_surface_t *ann_power;
 
-  float    rate;
+  float rate;
+  float ann_rate;
   uint32_t n_channels;
+  float min_dB, max_dB, step_dB;
+
+  struct FFTAnalysis *fa;
+  float *p_x, *p_y;
 
 } SpectraUI;
 
+
+static void draw_scales(SpectraUI* ui) {
+  float x, y;
+  float w_width = WWIDTH;
+  float w_height = WHEIGHT_PW;
+  robtk_xydraw_set_surface(ui->xyp, NULL);
+
+  if (ui->ann_power) {
+    cairo_surface_destroy (ui->ann_power);
+  }
+
+  ui->ann_power = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, w_width, w_height);
+  cairo_t *cr = cairo_create (ui->ann_power);
+
+  cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+  cairo_rectangle(cr, 0.0, 0.0, w_width, w_height);
+  cairo_fill(cr);
+
+  const float divisor = ui->rate / 2.0 / (float) ft_bins(ui->fa);
+
+  cairo_set_font_size(cr, 9);
+  cairo_text_extents_t t_ext;
+
+  char buf[32];
+  /* horiz lines, dB */
+  double dashes[] = { 3.0, 5.0 };
+  cairo_set_line_width (cr, 1.0);
+
+  for (float dB = 0; dB > ui->min_dB; dB -= ui->step_dB ) {
+    sprintf(buf, "%+0.0fdB", dB );
+
+    y = (dB - ui->min_dB) / (ui->max_dB - ui->min_dB );
+    y = w_height * (1.0 -y);
+
+    if (dB == 0.0) {
+      cairo_set_dash(cr, NULL, 0, 0);
+    } else {
+      cairo_set_dash(cr, dashes, 2, 0.0);
+    }
+
+    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
+    cairo_move_to(cr, 35.0, rintf(y) + .5);
+    cairo_line_to(cr, w_width, rintf(y) + .5);
+    cairo_stroke(cr);
+
+    cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
+    cairo_text_extents(cr, buf, &t_ext);
+    cairo_move_to(cr, 32.0 - t_ext.width - t_ext.x_bearing, y + t_ext.height /2.0 - 1.0);
+    cairo_show_text(cr, buf);
+    cairo_stroke(cr);
+
+  }
+
+  /* freq scale */
+  cairo_set_line_width (cr, 1.25);
+  cairo_set_dash(cr, NULL, 0, 0);
+
+  for (int32_t i = 0; i < 30; ++i) {
+    const double f_m = pow(2, (i - 16) / 3.) * 1000.0;
+    x = ft_x_deflect(ui->fa, f_m / divisor) * w_width;
+    if (x < 35) continue;
+
+    if (f_m < 1000.0) {
+      sprintf(buf, "%0.0fHz", f_m);
+    } else {
+      sprintf(buf, "%0.1fkHz", f_m/1000.0);
+    }
+
+    cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
+    cairo_move_to(cr, x + 2.0, 3.0);
+
+    cairo_rotate(cr, M_PI / 2.0);
+    cairo_show_text(cr, buf);
+    cairo_rotate(cr, -M_PI / 2.0);
+    cairo_stroke(cr);
+
+    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
+    cairo_move_to(cr, rintf(x) - .5, w_height);
+    cairo_line_to(cr, rintf(x) - .5, 0.0);
+    cairo_stroke(cr);
+  }
+
+  cairo_destroy(cr);
+  robtk_xydraw_set_surface(ui->xyp, ui->ann_power);
+}
+
+static void reinitialize_fft(SpectraUI* ui) {
+  fa_free(ui->fa);
+  free(ui->p_x);
+  free(ui->p_y);
+  ui->fa = (struct FFTAnalysis*) malloc(sizeof(struct FFTAnalysis));
+  fa_init(ui->fa, ui->rate);
+  ui->p_x = (float*) malloc(ft_bins(ui->fa) * sizeof(float));
+  ui->p_y = (float*) malloc(ft_bins(ui->fa) * sizeof(float));
+}
 
 /******************************************************************************
  * Communication with DSP backend -- send/receive settings
@@ -107,32 +213,53 @@ static void update_spectrum(SpectraUI* ui, const uint32_t channel, const size_t 
   if (channel > ui->n_channels) {
     return;
   }
-  float peak = 0;
-  for (uint32_t i=0; i < n_elem; ++i) {
-    const float p = fabsf(data[i]);
-    if (p > peak) peak = p;
+
+  /* TODO multi-channel */
+  if (channel != 0) {
+    return;
   }
-  char tmp[64];
-  snprintf(tmp, 64, "c:%d n:%d l:%.2f\n", channel, n_elem, peak);
-  robtk_lbl_set_text(ui->lbl_test, tmp);
+
+  if (!fa_run(ui->fa, n_elem, data)) {
+    uint32_t p = 0;
+    uint32_t b = ft_bins(ui->fa);
+    for (uint32_t i = 0; i < b-1; i++) {
+      if (i < 2 || i > b-64) continue;
+      ui->p_x[p] = ft_x_deflect(ui->fa, i);
+      if (ui->p_x[p] < 36/(float)WWIDTH) continue;
+      ui->p_y[p] = ft_y_power(ui->fa, i, ui->min_dB, ui->max_dB);
+      p++;
+    }
+    robtk_xydraw_set_points(ui->xyp, p, ui->p_x, ui->p_y);
+  }
 }
 
 /******************************************************************************
  * RobWidget
  */
 
+static void plot_position_right(RobWidget *rw, const int pw, const int ph) {
+  rw->area.x = rint((pw - rw->area.width) * 1.0);
+  rw->area.y = rint((ph - rw->area.height) * rw->yalign);
+}
+
 static RobWidget * toplevel(SpectraUI* ui, void * const top)
 {
-  /* main widget: layout */
-  ui->hbox = rob_hbox_new(FALSE, 2);
-  robwidget_make_toplevel(ui->hbox, top);
-  ROBWIDGET_SETNAME(ui->hbox, "spectra");
+  ui->vbox = rob_vbox_new(FALSE, 2);
+  robwidget_make_toplevel(ui->vbox, top);
+  ROBWIDGET_SETNAME(ui->vbox, "spectra");
 
-  ui->lbl_test = robtk_lbl_new("---------Test----------");
-  /* main layout */
-  rob_hbox_child_pack(ui->hbox, robtk_lbl_widget(ui->lbl_test), FALSE);
+  ui->xyp = robtk_xydraw_new(WWIDTH, WHEIGHT_PW);
+  ui->xyp->rw->position_set = plot_position_right;
 
-  return ui->hbox;
+  rob_vbox_child_pack(ui->vbox, robtk_xydraw_widget(ui->xyp), FALSE);
+
+  ui->ann_power = NULL;
+  draw_scales(ui);
+  //robtk_xydraw_set_color(ui->xyz, .2, .9, .1, 1.0);
+
+  robtk_xydraw_set_surface(ui->xyp, ui->ann_power);
+
+  return ui->vbox;
 }
 
 /******************************************************************************
@@ -185,10 +312,15 @@ instantiate(
   ui->write      = write_function;
   ui->controller = controller;
 
-  ui->rate       = 48000;
+  ui->rate    = 48000;
+  ui->min_dB  = -80.0;
+  ui->max_dB  =  6.0;
+  ui->step_dB =  6.0;
 
   map_spectra_uris(ui->map, &ui->uris);
   lv2_atom_forge_init(&ui->forge, ui->map);
+
+  reinitialize_fft(ui);
 
   *widget = toplevel(ui, ui_toplevel);
   ui_enable(ui);
@@ -210,8 +342,12 @@ cleanup(LV2UI_Handle handle)
    */
   ui_disable(ui);
 
-  robtk_lbl_destroy(ui->lbl_test);
-  rob_box_destroy(ui->hbox);
+  robtk_xydraw_destroy(ui->xyp);
+  cairo_surface_destroy (ui->ann_power);
+  rob_box_destroy(ui->vbox);
+  fa_free(ui->fa);
+  free(ui->p_x);
+  free(ui->p_y);
 
   free(ui);
 }
@@ -297,7 +433,8 @@ port_event(LV2UI_Handle handle,
 	)
     {
       ui->rate = ((LV2_Atom_Float*)a0)->body;
-      // TODO re-init..
+      reinitialize_fft(ui);
+      draw_scales(ui);
     }
   }
 }

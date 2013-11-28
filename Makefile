@@ -75,6 +75,10 @@ ifeq ($(shell pkg-config --exists lv2 || echo no), no)
   $(error "LV2 SDK was not found")
 endif
 
+ifeq ($(shell pkg-config --exists fftw3f || echo no), no)
+  $(error "fftw3f library was not found")
+endif
+
 ifeq ($(shell pkg-config --atleast-version=1.4 lv2 || echo no), no)
   $(error "LV2 SDK needs to be version 1.4 or later")
 endif
@@ -105,11 +109,11 @@ endif
 override CFLAGS +=-fPIC $(OPTIMIZATIONS)
 override CFLAGS += `pkg-config --cflags lv2`
 
-GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango`
-GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango`
+GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango fftw3f`
+GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango fftw3f`
 
-GLUICFLAGS+=`pkg-config --cflags cairo pango`
-GLUILIBS+=`pkg-config --libs cairo pango pangocairo $(PKG_LIBS)`
+GLUICFLAGS+=`pkg-config --cflags cairo pango fftw3f`
+GLUILIBS+=`pkg-config --libs cairo pango pangocairo fftw3f $(PKG_LIBS)`
 
 ifeq ($(GLTHREADSYNC), yes)
   GLUICFLAGS+=-DTHREADSYNC
@@ -182,8 +186,8 @@ $(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/spectra.c src/uris.h
 
 -include $(RW)robtk.mk
 
-$(BUILDDIR)$(LV2GTK)$(LIB_EXT): gui/spectra.c
-$(BUILDDIR)$(LV2GUI)$(LIB_EXT): gui/spectra.c
+$(BUILDDIR)$(LV2GTK)$(LIB_EXT): gui/spectra.c gui/fft.c
+$(BUILDDIR)$(LV2GUI)$(LIB_EXT): gui/spectra.c gui/fft.c
 
 ###############################################################################
 # install/uninstall/clean target definitions
