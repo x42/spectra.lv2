@@ -35,8 +35,23 @@
 #define MAX(A,B) ( (A) > (B) ? (A) : (B) )
 #endif
 
-#define WWIDTH (840)
-#define WHEIGHT_PW (400)
+/* widget, window size */
+#define WWIDTH  (700.)
+#define WHEIGHT (380.)
+
+/* annotation border left/top */
+#define AWIDTH  (35.)
+#define AHEIGHT (25.)
+
+/* actual data area size */
+#define DWIDTH  (WWIDTH - AWIDTH)
+#define DHEIGHT (WHEIGHT - AHEIGHT)
+
+/* data <> window scale + offset */
+#define RWIDTH  (DWIDTH / WWIDTH)
+#define RHEIGHT (DHEIGHT / WHEIGHT)
+#define AOFFS_X (AWIDTH / WWIDTH)
+
 
 typedef struct {
   LV2_Atom_Forge forge;
@@ -63,19 +78,17 @@ typedef struct {
 
 static void draw_scales(SpectraUI* ui) {
   float x, y;
-  float w_width = WWIDTH;
-  float w_height = WHEIGHT_PW;
   robtk_xydraw_set_surface(ui->xyp, NULL);
 
   if (ui->ann_power) {
     cairo_surface_destroy (ui->ann_power);
   }
 
-  ui->ann_power = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, w_width, w_height);
+  ui->ann_power = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, WWIDTH, WHEIGHT);
   cairo_t *cr = cairo_create (ui->ann_power);
 
   cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
-  cairo_rectangle(cr, 0.0, 0.0, w_width, w_height);
+  cairo_rectangle(cr, 0.0, 0.0, WWIDTH, WHEIGHT);
   cairo_fill(cr);
 
   const float divisor = ui->rate / 2.0 / (float) ft_bins(ui->fa);
@@ -92,7 +105,7 @@ static void draw_scales(SpectraUI* ui) {
     sprintf(buf, "%+0.0fdB", dB );
 
     y = (dB - ui->min_dB) / (ui->max_dB - ui->min_dB );
-    y = w_height * (1.0 -y);
+    y = WHEIGHT - DHEIGHT * y;
 
     if (dB == 0.0) {
       cairo_set_dash(cr, NULL, 0, 0);
@@ -101,13 +114,13 @@ static void draw_scales(SpectraUI* ui) {
     }
 
     cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-    cairo_move_to(cr, 35.0, rintf(y) + .5);
-    cairo_line_to(cr, w_width, rintf(y) + .5);
+    cairo_move_to(cr, AWIDTH, rintf(y) + .5);
+    cairo_line_to(cr, WWIDTH, rintf(y) + .5);
     cairo_stroke(cr);
 
     cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
     cairo_text_extents(cr, buf, &t_ext);
-    cairo_move_to(cr, 32.0 - t_ext.width - t_ext.x_bearing, y + t_ext.height /2.0 - 1.0);
+    cairo_move_to(cr, AWIDTH - 2 - t_ext.width - t_ext.x_bearing, y + t_ext.height /2.0 - 1.0);
     cairo_show_text(cr, buf);
     cairo_stroke(cr);
 
@@ -117,10 +130,10 @@ static void draw_scales(SpectraUI* ui) {
   cairo_set_line_width (cr, 1.25);
   cairo_set_dash(cr, NULL, 0, 0);
 
-  for (int32_t i = 0; i < 30; ++i) {
-    const double f_m = pow(2, (i - 16) / 3.) * 1000.0;
-    x = ft_x_deflect(ui->fa, f_m / divisor) * w_width;
-    if (x < 35) continue;
+  for (int32_t i = 0; i < 31; ++i) {
+    if (i < 5 && (i%3)) continue;
+    const double f_m = pow(2, (i - 17) / 3.) * 1000.0;
+    x = ft_x_deflect(ui->fa, f_m / divisor) * DWIDTH + AWIDTH;
 
     if (f_m < 1000.0) {
       sprintf(buf, "%0.0fHz", f_m);
@@ -137,7 +150,7 @@ static void draw_scales(SpectraUI* ui) {
     cairo_stroke(cr);
 
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-    cairo_move_to(cr, rintf(x) - .5, w_height);
+    cairo_move_to(cr, rintf(x) - .5, WHEIGHT);
     cairo_line_to(cr, rintf(x) - .5, 0.0);
     cairo_stroke(cr);
   }
@@ -223,10 +236,10 @@ static void update_spectrum(SpectraUI* ui, const uint32_t channel, const size_t 
     uint32_t p = 0;
     uint32_t b = ft_bins(ui->fa);
     for (uint32_t i = 0; i < b-1; i++) {
-      if (i < 2 || i > b-64) continue;
-      ui->p_x[p] = ft_x_deflect(ui->fa, i);
-      if (ui->p_x[p] < 36/(float)WWIDTH) continue;
-      ui->p_y[p] = ft_y_power(ui->fa, i, ui->min_dB, ui->max_dB);
+      //if (i < 2 || i > b-64) continue;
+      ui->p_x[p] = ft_x_deflect(ui->fa, i) * RWIDTH + AOFFS_X;
+      //if (ui->p_x[p] < 36/(float)WWIDTH) continue;
+      ui->p_y[p] = ft_y_power(ui->fa, i, ui->min_dB, ui->max_dB) * RHEIGHT;
       p++;
     }
     robtk_xydraw_set_points(ui->xyp, p, ui->p_x, ui->p_y);
@@ -248,7 +261,7 @@ static RobWidget * toplevel(SpectraUI* ui, void * const top)
   robwidget_make_toplevel(ui->vbox, top);
   ROBWIDGET_SETNAME(ui->vbox, "spectra");
 
-  ui->xyp = robtk_xydraw_new(WWIDTH, WHEIGHT_PW);
+  ui->xyp = robtk_xydraw_new(WWIDTH, WHEIGHT);
   ui->xyp->rw->position_set = plot_position_right;
 
   rob_vbox_child_pack(ui->vbox, robtk_xydraw_widget(ui->xyp), FALSE);

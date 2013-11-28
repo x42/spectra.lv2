@@ -110,7 +110,7 @@ struct FFTAnalysis {
 };
 
 static void fa_init(struct FFTAnalysis *fa, double rate) {
-	fa->log_rate = (1.0f - 4000.0f/rate) / ((2000.0f/rate) * (2000.0f/rate));
+	fa->log_rate = (1.0f - 8000.0f/rate) / ((4000.0f/rate) * (4000.0f/rate));
 	fa->log_base = log10f(1.0f + fa->log_rate);
 	fa->rate = rate;
 
