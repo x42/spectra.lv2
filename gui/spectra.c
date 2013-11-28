@@ -36,8 +36,8 @@
 #endif
 
 /* widget, window size */
-#define WWIDTH  (700.)
-#define WHEIGHT (380.)
+#define WWIDTH  (800.)
+#define WHEIGHT (400.)
 
 /* annotation border left/top */
 #define AWIDTH  (35.)
@@ -131,7 +131,8 @@ static void draw_scales(SpectraUI* ui) {
   cairo_set_dash(cr, NULL, 0, 0);
 
   for (int32_t i = 0; i < 31; ++i) {
-    if (i < 5 && (i%3)) continue;
+    if (i < 7 && (i%4)) continue;
+    if (i==8) continue;
     const double f_m = pow(2, (i - 17) / 3.) * 1000.0;
     x = ft_x_deflect(ui->fa, f_m / divisor) * DWIDTH + AWIDTH;
 
@@ -326,7 +327,7 @@ instantiate(
   ui->controller = controller;
 
   ui->rate    = 48000;
-  ui->min_dB  = -80.0;
+  ui->min_dB  = -92.0;
   ui->max_dB  =  6.0;
   ui->step_dB =  6.0;
 

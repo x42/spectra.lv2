@@ -110,12 +110,12 @@ struct FFTAnalysis {
 };
 
 static void fa_init(struct FFTAnalysis *fa, double rate) {
-	fa->log_rate = (1.0f - 8000.0f/rate) / ((4000.0f/rate) * (4000.0f/rate));
+	fa->log_rate = (1.0f - 10000.0f/rate) / ((5000.0f/rate) * (5000.0f/rate));
 	fa->log_base = log10f(1.0f + fa->log_rate);
 	fa->rate = rate;
 
 	fa->ft = (struct FFTX*) calloc(1, sizeof(struct FFTX));
-	ft_init(fa->ft, MAX(8192, rate / 3)); // accuracy
+	ft_init(fa->ft, MAX(8192, rate / 5)); // accuracy
 }
 
 static void fa_free(struct FFTAnalysis *fa) {
@@ -147,7 +147,7 @@ static int fa_run(struct FFTAnalysis *fa,
 	fa->ft->rboff = (fa->ft->rboff + n_samples) % n_siz;
 	/* update display only at ~15fps */
 	fa->ft->afpvf += n_samples;
-	if (fa->ft->afpvf < fa->rate / 15) {
+	if (fa->ft->afpvf < fa->rate / 25) {
 		return -1;
 	}
 	fa->ft->afpvf = 0;
