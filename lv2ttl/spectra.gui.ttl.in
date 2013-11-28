@@ -1,0 +1,13 @@
+@LV2NAME@:ui@UI_URI_SUFFIX@
+	a @UI_TYPE@ ;
+	lv2:requiredFeature urid:map ;
+	@UI_REQ@
+	ui:portNotification [
+		ui:plugin @LV2NAME@:Mono@URI_SUFFIX@ ;
+		lv2:symbol "notify" ;
+		ui:notifyType atom:Blank
+	] , [
+		ui:plugin @LV2NAME@:Stereo@URI_SUFFIX@ ;
+		lv2:symbol "notify" ;
+		ui:notifyType atom:Blank
+	] .
