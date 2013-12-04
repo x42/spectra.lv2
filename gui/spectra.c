@@ -52,6 +52,35 @@
 #define RHEIGHT (DHEIGHT / WHEIGHT)
 #define AOFFS_X (AWIDTH / WWIDTH)
 
+/* some local additions to fft.c */
+static float ft_y_power(struct FFTAnalysis *fa, const int b, const float min_dB, const float max_dB) {
+  assert(max_dB > min_dB);
+  return (fftx_power_to_dB(fa->power[b]) - min_dB) / (max_dB - min_dB);
+}
+
+struct FFTLogscale {
+  float log_rate;
+  float log_base;
+  float data_size;
+  float rate;
+};
+
+static void fl_init(struct FFTLogscale *fl, uint32_t window_size, double rate) {
+  fl->data_size = window_size / 2;
+  fl->log_rate  = (1.0f - 10000.0f/rate) / ((5000.0f/rate) * (5000.0f/rate));
+  fl->log_base  = log10f(1.0f + fl->log_rate);
+  fl->rate = rate;
+}
+
+static float ft_x_deflect_bin(struct FFTLogscale *fl, float b) {
+  assert(fl->data_size > 0);
+  return log10f(1.0 + b * fl->log_rate / (float) fl->data_size) / fl->log_base;
+}
+
+static float ft_x_deflect_freq(struct FFTLogscale *fl, float f) {
+  assert(fl->data_size > 0);
+  return log10f(1.0 + f * fl->log_rate) / fl->log_base;
+}
 
 typedef struct {
   LV2_Atom_Forge forge;
@@ -71,6 +100,7 @@ typedef struct {
   float min_dB, max_dB, step_dB;
 
   struct FFTAnalysis *fa;
+  struct FFTLogscale fl;
   float *p_x, *p_y;
 
 } SpectraUI;
@@ -91,7 +121,7 @@ static void draw_scales(SpectraUI* ui) {
   cairo_rectangle(cr, 0.0, 0.0, WWIDTH, WHEIGHT);
   cairo_fill(cr);
 
-  const float divisor = ui->rate / 2.0 / (float) ft_bins(ui->fa);
+  const float divisor = ui->rate / 2.0 / (float) fftx_bins(ui->fa);
 
   cairo_set_font_size(cr, 9);
   cairo_text_extents_t t_ext;
@@ -134,7 +164,7 @@ static void draw_scales(SpectraUI* ui) {
     if (i < 7 && (i%4)) continue;
     if (i==8) continue;
     const double f_m = pow(2, (i - 17) / 3.) * 1000.0;
-    x = ft_x_deflect(ui->fa, f_m / divisor) * DWIDTH + AWIDTH;
+    x = ft_x_deflect_bin(&ui->fl, f_m / divisor) * DWIDTH + AWIDTH;
 
     if (f_m < 1000.0) {
       sprintf(buf, "%0.0fHz", f_m);
@@ -161,13 +191,14 @@ static void draw_scales(SpectraUI* ui) {
 }
 
 static void reinitialize_fft(SpectraUI* ui) {
-  fa_free(ui->fa);
+  fftx_free(ui->fa);
   free(ui->p_x);
   free(ui->p_y);
   ui->fa = (struct FFTAnalysis*) malloc(sizeof(struct FFTAnalysis));
-  fa_init(ui->fa, ui->rate);
-  ui->p_x = (float*) malloc(ft_bins(ui->fa) * sizeof(float));
-  ui->p_y = (float*) malloc(ft_bins(ui->fa) * sizeof(float));
+  fftx_init(ui->fa, 2*8192, ui->rate, 60);
+  fl_init(&ui->fl, 2*8192, ui->rate);
+  ui->p_x = (float*) malloc(fftx_bins(ui->fa) * sizeof(float));
+  ui->p_y = (float*) malloc(fftx_bins(ui->fa) * sizeof(float));
 }
 
 /******************************************************************************
@@ -233,12 +264,12 @@ static void update_spectrum(SpectraUI* ui, const uint32_t channel, const size_t 
     return;
   }
 
-  if (!fa_run(ui->fa, n_elem, data)) {
+  if (!fftx_run(ui->fa, n_elem, data)) {
     uint32_t p = 0;
-    uint32_t b = ft_bins(ui->fa);
+    uint32_t b = fftx_bins(ui->fa);
     for (uint32_t i = 0; i < b-1; i++) {
       //if (i < 2 || i > b-64) continue;
-      ui->p_x[p] = ft_x_deflect(ui->fa, i) * RWIDTH + AOFFS_X;
+      ui->p_x[p] = ft_x_deflect_bin(&ui->fl, i) * RWIDTH + AOFFS_X;
       //if (ui->p_x[p] < 36/(float)WWIDTH) continue;
       ui->p_y[p] = ft_y_power(ui->fa, i, ui->min_dB, ui->max_dB) * RHEIGHT;
       p++;
@@ -359,7 +390,7 @@ cleanup(LV2UI_Handle handle)
   robtk_xydraw_destroy(ui->xyp);
   cairo_surface_destroy (ui->ann_power);
   rob_box_destroy(ui->vbox);
-  fa_free(ui->fa);
+  fftx_free(ui->fa);
   free(ui->p_x);
   free(ui->p_y);
 
