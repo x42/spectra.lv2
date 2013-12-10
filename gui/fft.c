@@ -199,30 +199,54 @@ int fftx_run(struct FFTAnalysis *ft,
  */
 
 FFTX_FN_PREFIX
-uint32_t fftx_bins(struct FFTAnalysis *fa) {
-	 return fa->data_size;
+uint32_t fftx_bins(struct FFTAnalysis *ft) {
+	 return ft->data_size;
+}
+
+FFTX_FN_PREFIX
+inline float fast_log2 (float val) {
+	union {float f; int i;} t;
+	t.f = val;
+	int * const    exp_ptr =  &t.i;
+	int            x = *exp_ptr;
+	const int      log_2 = ((x >> 23) & 255) - 128;
+	x &= ~(255 << 23);
+	x += 127 << 23;
+	*exp_ptr = x;
+	val = ((-1.0f/3) * t.f + 2) * t.f - 2.0f/3;
+	return (val + log_2);
+}
+
+FFTX_FN_PREFIX
+inline float fast_log (const float val) {
+  return (fast_log2 (val) * 0.69314718f);
+}
+
+FFTX_FN_PREFIX
+inline float fast_log10 (const float val) {
+  return fast_log2(val) / 3.312500f;
 }
 
 FFTX_FN_PREFIX
 inline float fftx_power_to_dB(float a) {
 	/* 10 instead of 20 because of squared signal -- no sqrt(powerp[]) */
-	return a > 0 ? 10.0 * log10f(a) : -INFINITY;
+	return a > 0 ? 10.0 * fast_log10(a) : -INFINITY;
 }
 
 FFTX_FN_PREFIX
-float fftx_power_at_bin(struct FFTAnalysis *fa, const int b) {
-	return (fftx_power_to_dB(fa->power[b]));
+float fftx_power_at_bin(struct FFTAnalysis *ft, const int b) {
+	return (fftx_power_to_dB(ft->power[b]));
 }
 
 FFTX_FN_PREFIX
-float fftx_freq_at_bin(struct FFTAnalysis *fa, const int b) {
+float fftx_freq_at_bin(struct FFTAnalysis *ft, const int b) {
 	/* calc phase: difference minus expected difference */
-	float phase = fa->phase[b] - fa->phase_h[b] - (float) b * fa->phasediff_bin;
+	float phase = ft->phase[b] - ft->phase_h[b] - (float) b * ft->phasediff_bin;
 	/* clamp to -M_PI .. M_PI */
 	int over = phase / M_PI;
 	over += (over >= 0) ? (over&1) : -(over&1);
 	phase -= M_PI*(float)over;
 	/* scale according to overlap */
-	phase *= (fa->data_size / fa->step) / M_PI;
-	return fa->freq_per_bin * ((float) b + phase);
+	phase *= (ft->data_size / ft->step) / M_PI;
+	return ft->freq_per_bin * ((float) b + phase);
 }

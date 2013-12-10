@@ -74,7 +74,7 @@ static void fl_init(struct FFTLogscale *fl, uint32_t window_size, double rate) {
 
 static float ft_x_deflect_bin(struct FFTLogscale *fl, float b) {
   assert(fl->data_size > 0);
-  return log10f(1.0 + b * fl->log_rate / (float) fl->data_size) / fl->log_base;
+  return fast_log10(1.0 + b * fl->log_rate / (float) fl->data_size) / fl->log_base;
 }
 
 typedef struct {
@@ -190,8 +190,8 @@ static void reinitialize_fft(SpectraUI* ui) {
   free(ui->p_x);
   free(ui->p_y);
   ui->fa = (struct FFTAnalysis*) malloc(sizeof(struct FFTAnalysis));
-  fftx_init(ui->fa, 2*8192, ui->rate, 60);
-  fl_init(&ui->fl, 2*8192, ui->rate);
+  fftx_init(ui->fa, 4096, ui->rate, 60);
+  fl_init(&ui->fl, 4096, ui->rate);
   ui->p_x = (float*) malloc(fftx_bins(ui->fa) * sizeof(float));
   ui->p_y = (float*) malloc(fftx_bins(ui->fa) * sizeof(float));
 }
@@ -263,7 +263,7 @@ static void update_spectrum(SpectraUI* ui, const uint32_t channel, const size_t 
     uint32_t p = 0;
     uint32_t b = fftx_bins(ui->fa);
 #if 0
-    for (uint32_t i = 0; i < b-1; i++) {
+    for (uint32_t i = 1; i < b-1; i++) {
       ui->p_x[p] = ft_x_deflect_bin(&ui->fl, i) * RWIDTH + AOFFS_X;
       //if (ui->p_x[p] < 36/(float)WWIDTH) continue;
       ui->p_y[p] = ft_y_power(ui->fa, i, ui->min_dB, ui->max_dB) * RHEIGHT;
@@ -305,7 +305,9 @@ static RobWidget * toplevel(SpectraUI* ui, void * const top)
   ui->xyp->rw->position_set = plot_position_right;
 
   robtk_xydraw_set_linewidth(ui->xyp, 1.5);
-  rob_vbox_child_pack(ui->vbox, robtk_xydraw_widget(ui->xyp), FALSE);
+  robtk_xydraw_set_drawing_mode(ui->xyp, RobTkXY_ymax_zline);
+
+  rob_vbox_child_pack(ui->vbox, robtk_xydraw_widget(ui->xyp), FALSE, FALSE);
 
   ui->ann_power = NULL;
   draw_scales(ui);
