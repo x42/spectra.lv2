@@ -197,12 +197,21 @@ run(LV2_Handle handle, uint32_t n_samples)
 
   /* Process incoming events from GUI */
   if (self->control) {
+#if 0
+    printf("CTRL size %d\n", (self->control)->atom.size);
+    for(uint8_t xx=0; xx < (self->control)->atom.size + 8; ++xx) {
+      uint8_t d = ((uint8_t*)(self->control))[xx];
+      printf("%02x%s", d, (xx%4)==3? "|": " ");
+    }
+    printf("\n");
+#endif
     LV2_Atom_Event* ev = lv2_atom_sequence_begin(&(self->control)->body);
     /* for each message from UI... */
     while(!lv2_atom_sequence_is_end(&(self->control)->body, (self->control)->atom.size, ev)) {
       /* .. only look at atom-events.. */
       if (ev->body.type == self->uris.atom_Blank) {
 	const LV2_Atom_Object* obj = (LV2_Atom_Object*)&ev->body;
+	//printf("BLANK recv.. %x %x %x %x\n", obj->atom.size, obj->atom.type, obj->body.id, obj->body.otype);
 	/* interpret atom-objects: */
 	if (obj->body.otype == self->uris.ui_on) {
 	  /* UI was activated */
