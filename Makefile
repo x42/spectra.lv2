@@ -110,10 +110,10 @@ override CFLAGS +=-fPIC $(OPTIMIZATIONS)
 override CFLAGS += `pkg-config --cflags lv2`
 
 GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango fftw3f`
-GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango fftw3f`
+GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango` `pkg-config --variable=libdir fftw3f`/libfftw3f.a -lm
 
 GLUICFLAGS+=`pkg-config --cflags cairo pango fftw3f`
-GLUILIBS+=`pkg-config --libs cairo pango pangocairo fftw3f $(PKG_LIBS)`
+GLUILIBS+=`pkg-config --libs cairo pango pangocairo $(PKG_LIBS)` `pkg-config --variable=libdir fftw3f`/libfftw3f.a -lm
 
 ifeq ($(GLTHREADSYNC), yes)
   GLUICFLAGS+=-DTHREADSYNC
