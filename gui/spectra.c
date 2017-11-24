@@ -194,8 +194,12 @@ static void reinitialize_fft(SpectraUI* ui) {
   free(ui->p_x);
   free(ui->p_y);
   ui->fa = (struct FFTAnalysis*) malloc(sizeof(struct FFTAnalysis));
-  fftx_init(ui->fa, 4096, ui->rate, 60);
-  fl_init(&ui->fl, 4096, ui->rate);
+  uint32_t window_size = 4096;
+  if (ui->rate > 96000) {
+    window_size = 8192;
+  }
+  fftx_init(ui->fa, window_size, ui->rate, 60);
+  fl_init(&ui->fl, window_size, ui->rate);
   ui->p_x = (float*) malloc(fftx_bins(ui->fa) * sizeof(float));
   ui->p_y = (float*) malloc(fftx_bins(ui->fa) * sizeof(float));
 }
