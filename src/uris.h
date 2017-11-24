@@ -25,6 +25,12 @@
 
 #define SPR_URI "http://gareus.org/oss/lv2/spectra"
 
+#ifdef HAVE_LV2_1_8
+#define x_forge_object lv2_atom_forge_object
+#else
+#define x_forge_object lv2_atom_forge_blank
+#endif
+
 typedef struct {
 	LV2_URID atom_Blank;
 	LV2_URID atom_Vector;

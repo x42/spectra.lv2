@@ -1,28 +1,26 @@
 #!/usr/bin/make -f
 
-OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -ffast-math -fomit-frame-pointer -O3 -fno-finite-math-only
 PREFIX ?= /usr/local
-CFLAGS ?= -g -Wall -Wno-unused-function
-LIBDIR ?= lib
+LV2DIR ?= $(PREFIX)/lib/lv2
 
-EXTERNALUI?=yes
-KXURI?=yes
+CFLAGS ?= -g -Wall -Wno-unused-function
+OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -ffast-math -fomit-frame-pointer -O3 -fno-finite-math-only
+
+spectr_VERSION ?= $(shell (git describe --tags HEAD || echo "0") | sed 's/-g.*$$//;s/^v//')
 RW=robtk/
+
 ###############################################################################
-LV2DIR ?= $(PREFIX)/$(LIBDIR)/lv2
 
 BUILDDIR=build/
 BUNDLE=spectra.lv2
 
 LV2NAME=spectra
 LV2GUI=spectraUI_gl
-LV2GTK=spectraUI_gtk
 
-#########
+###############################################################################
 
 LV2UIREQ=
 GLUICFLAGS=-I.
-GTKUICFLAGS=-I.
 
 UNAME=$(shell uname)
 ifeq ($(UNAME),Darwin)
@@ -30,43 +28,55 @@ ifeq ($(UNAME),Darwin)
   LIB_EXT=.dylib
   UI_TYPE=ui:CocoaUI
   PUGL_SRC=$(RW)pugl/pugl_osx.m
-  PKG_LIBS=
-  GLUILIBS=-framework Cocoa -framework OpenGL
-  BUILDGTK=no
+  PKG_GL_LIBS=
+  GLUILIBS=-framework Cocoa -framework OpenGL -framework CoreFoundation
+  EXTENDED_RE=-E
 else
-  LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic
+  LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed
   LIB_EXT=.so
   UI_TYPE=ui:X11UI
   PUGL_SRC=$(RW)pugl/pugl_x11.c
-  PKG_LIBS=glu gl
+  PKG_GL_LIBS=glu gl
   GLUILIBS=-lX11
   GLUICFLAGS+=`pkg-config --cflags glu`
+  EXTENDED_RE=-r
+endif
+
+ifneq ($(XWIN),)
+  CC=$(XWIN)-gcc
+  CXX=$(XWIN)-g++
+  STRIP=$(XWIN)-strip
+  LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed
+  LIB_EXT=.dll
+  PUGL_SRC=$(RW)pugl/pugl_win.cpp
+  PKG_GL_LIBS=
+  UI_TYPE=ui:WindowsUI
+  GLUILIBS=-lws2_32 -lwinmm -lopengl32 -lglu32 -lgdi32 -lcomdlg32 -lpthread
+  GLUICFLAGS=-I.
+  override LDFLAGS += -static-libgcc -static-libstdc++
 endif
 
 ifeq ($(EXTERNALUI), yes)
-  ifeq ($(KXURI), yes)
-    UI_TYPE=kx:Widget
-    LV2UIREQ+=lv2:requiredFeature kx:Widget;
-    override CFLAGS += -DXTERNAL_UI
-  else
-    LV2UIREQ+=lv2:requiredFeature ui:external;
-    override CFLAGS += -DXTERNAL_UI
-    UI_TYPE=ui:external
-  endif
+  UI_TYPE=
 endif
 
-ifeq ($(BUILDOPENGL)$(BUILDGTK), nono)
-  $(error at least one of gtk or openGL needs to be enabled)
+ifeq ($(UI_TYPE),)
+  UI_TYPE=kx:Widget
+  LV2UIREQ+=lv2:requiredFeature kx:Widget;
+  override CFLAGS += -DXTERNAL_UI
+endif
+
+ifeq ($(BUILDOPENGL), no)
+  $(error openGL/LV2 UI is mandatory)
 endif
 
 targets=$(BUILDDIR)$(LV2NAME)$(LIB_EXT)
-
-ifneq ($(BUILDOPENGL), no)
 targets+=$(BUILDDIR)$(LV2GUI)$(LIB_EXT)
-endif
-ifneq ($(BUILDGTK), no)
-targets+=$(BUILDDIR)$(LV2GTK)$(LIB_EXT)
-endif
+
+###############################################################################
+# extract versions
+LV2VERSION=$(spectr_VERSION)
+include git2lv2.mk
 
 ###############################################################################
 # check for build-dependencies
@@ -79,12 +89,12 @@ ifeq ($(shell pkg-config --exists fftw3f || echo no), no)
   $(error "fftw3f library was not found")
 endif
 
-ifeq ($(shell pkg-config --atleast-version=1.4 lv2 || echo no), no)
-  $(error "LV2 SDK needs to be version 1.4 or later")
+ifeq ($(shell pkg-config --atleast-version=1.6.0 lv2 || echo no), no)
+  $(error "LV2 SDK needs to be version 1.6.0 or later")
 endif
 
-ifeq ($(shell pkg-config --exists glib-2.0 gtk+-2.0 pango cairo $(PKG_LIBS) || echo no), no)
-  $(error "This plugin requires cairo, pango, openGL, glib-2.0 and gtk+-2.0")
+ifeq ($(shell pkg-config --exists pango cairo $(PKG_GL_LIBS) || echo no), no)
+  $(error "This plugin requires cairo pango $(PKG_GL_LIBS)")
 endif
 
 ifneq ($(MAKECMDGOALS), submodules)
@@ -98,30 +108,45 @@ ifneq ($(MAKECMDGOALS), submodules)
   endif
 endif
 
-# check for LV2 idle thread
-ifeq ($(shell pkg-config --atleast-version=1.4.2 lv2 && echo yes), yes)
-  GLUICFLAGS+=-DHAVE_IDLE_IFACE
-  GTKUICFLAGS+=-DHAVE_IDLE_IFACE
-  LV2UIREQ+=lv2:requiredFeature ui:idleInterface; lv2:extensionData ui:idleInterface;
+# LV2 idle >= lv2-1.6.0
+GLUICFLAGS+=-DHAVE_IDLE_IFACE
+LV2UIREQ+=lv2:requiredFeature ui:idleInterface; lv2:extensionData ui:idleInterface;
+
+# check for lv2_atom_forge_object  new in 1.8.1 deprecates lv2_atom_forge_blank
+ifeq ($(shell pkg-config --atleast-version=1.8.1 lv2 && echo yes), yes)
+  override CFLAGS += -DHAVE_LV2_1_8
 endif
 
 # add library dependent flags and libs
-override CFLAGS +=-fPIC $(OPTIMIZATIONS)
+override CFLAGS += $(OPTIMIZATIONS) -DVERSION="\"$(spectr_VERSION)\""
 override CFLAGS += `pkg-config --cflags lv2`
+ifeq ($(XWIN),)
+override CFLAGS += -fPIC -fvisibility=hidden
+else
+override CFLAGS += -DPTW32_STATIC_LIB
+endif
 
-GTKUICFLAGS+=`pkg-config --cflags gtk+-2.0 cairo pango fftw3f`
-GTKUILIBS+=`pkg-config --libs gtk+-2.0 cairo pango` `pkg-config --variable=libdir fftw3f`/libfftw3f.a -lm
+GLUICFLAGS+=`pkg-config --cflags cairo pango fftw3f` $(CFLAGS)
+GLUILIBS+=`pkg-config $(PKG_UI_FLAGS) --libs cairo pango pangocairo fftw3f $(PKG_GL_LIBS)`
 
-GLUICFLAGS+=`pkg-config --cflags cairo pango fftw3f`
-GLUILIBS+=`pkg-config --libs cairo pango pangocairo $(PKG_LIBS)` `pkg-config --variable=libdir fftw3f`/libfftw3f.a -lm
+ifneq ($(XWIN),)
+GLUILIBS+=-lpthread -lusp10
+endif
+
+GLUICFLAGS+=$(LIC_CFLAGS)
+GLUILIBS+=$(LIC_LOADLIBES)
 
 ifeq ($(GLTHREADSYNC), yes)
   GLUICFLAGS+=-DTHREADSYNC
 endif
 
-ROBGL+= Makefile
-ROBGTK += Makefile
+ifneq ($(LIC_CFLAGS),)
+  SIGNATURE=, <http:\\/\\/harrisonconsoles.com\\/lv2\\/license\#interface>
+  override CFLAGS += -I$(RW)
+endif
 
+
+ROBGL+= Makefile
 
 ###############################################################################
 # build target definitions
@@ -141,7 +166,7 @@ submodules:
 
 all: submodule_check $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl $(targets)
 
-$(BUILDDIR)manifest.ttl: lv2ttl/manifest.gl.ttl.in lv2ttl/manifest.gtk.ttl.in lv2ttl/manifest.lv2.ttl.in lv2ttl/manifest.ttl.in Makefile
+$(BUILDDIR)manifest.ttl: lv2ttl/manifest.gl.ttl.in lv2ttl/manifest.lv2.ttl.in lv2ttl/manifest.ttl.in Makefile
 	@mkdir -p $(BUILDDIR)
 	sed "s/@LV2NAME@/$(LV2NAME)/g" \
 	    lv2ttl/manifest.ttl.in > $(BUILDDIR)manifest.ttl
@@ -151,29 +176,15 @@ ifneq ($(BUILDOPENGL), no)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@UI_TYPE@/$(UI_TYPE)/;s/@LV2GUI@/$(LV2GUI)/g" \
 	    lv2ttl/manifest.gl.ttl.in >> $(BUILDDIR)manifest.ttl
 endif
-ifneq ($(BUILDGTK), no)
-	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@URI_SUFFIX@/_gtk/g" \
-	    lv2ttl/manifest.lv2.ttl.in >> $(BUILDDIR)manifest.ttl
-	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@LIB_EXT@/$(LIB_EXT)/g;s/@LV2GTK@/$(LV2GTK)/g" \
-	    lv2ttl/manifest.gtk.ttl.in >> $(BUILDDIR)manifest.ttl
-endif
 
 $(BUILDDIR)$(LV2NAME).ttl: lv2ttl/$(LV2NAME).ttl.in lv2ttl/$(LV2NAME).lv2.ttl.in lv2ttl/$(LV2NAME).gui.ttl.in Makefile
 	@mkdir -p $(BUILDDIR)
 	sed "s/@LV2NAME@/$(LV2NAME)/g" \
 	    lv2ttl/$(LV2NAME).ttl.in > $(BUILDDIR)$(LV2NAME).ttl
-ifneq ($(BUILDGTK), no)
-	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI_URI_SUFFIX@/_gtk/;s/@UI_TYPE@/ui:GtkUI/;s/@UI_REQ@//;s/@URI_SUFFIX@/_gtk/g" \
-	    lv2ttl/$(LV2NAME).gui.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
-endif
 ifneq ($(BUILDOPENGL), no)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI_URI_SUFFIX@/_gl/;s/@UI_TYPE@/$(UI_TYPE)/;s/@UI_REQ@/$(LV2UIREQ)/;s/@URI_SUFFIX@//g" \
 	    lv2ttl/$(LV2NAME).gui.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
-	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@//g;s/@UI@/ui_gl/g" \
-	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
-endif
-ifneq ($(BUILDGTK), no)
-	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@/_gtk/g;s/@NAME_SUFFIX@/ GTK/g;s/@UI@/ui_gtk/g" \
+	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@URI_SUFFIX@//g;s/@NAME_SUFFIX@//g;s/@UI@/ui_gl/g;s/@SIGNATURE@/$(SIGNATURE)/;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
 	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
 endif
 
@@ -183,10 +194,10 @@ $(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/spectra.c src/uris.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c99 \
 	  -o $(BUILDDIR)$(LV2NAME)$(LIB_EXT) src/spectra.c \
 	  -shared $(LV2LDFLAGS) $(LDFLAGS)
+	strip $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
 
 -include $(RW)robtk.mk
 
-$(BUILDDIR)$(LV2GTK)$(LIB_EXT): gui/spectra.c gui/fft.c
 $(BUILDDIR)$(LV2GUI)$(LIB_EXT): gui/spectra.c gui/fft.c
 
 ###############################################################################
@@ -202,14 +213,12 @@ uninstall:
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2NAME).ttl
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2NAME)$(LIB_EXT)
 	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2GUI)$(LIB_EXT)
-	rm -f $(DESTDIR)$(LV2DIR)/$(BUNDLE)/$(LV2GTK)$(LIB_EXT)
 	-rmdir $(DESTDIR)$(LV2DIR)/$(BUNDLE)
 
 clean:
 	rm -f $(BUILDDIR)manifest.ttl $(BUILDDIR)$(LV2NAME).ttl \
 	  $(BUILDDIR)$(LV2NAME)$(LIB_EXT) \
 	  $(BUILDDIR)$(LV2GUI)$(LIB_EXT)  \
-	  $(BUILDDIR)$(LV2GTK)$(LIB_EXT)
 	rm -rf $(BUILDDIR)*.dSYM
 	-test -d $(BUILDDIR) && rmdir $(BUILDDIR) || true
 

@@ -3,6 +3,7 @@
 	doap:name "Spectr-alanalyzer (Mono)@NAME_SUFFIX@" ;
 	lv2:project <http://gareus.org/oss/lv2/@LV2NAME@> ;
 	doap:license <http://usefulinc.com/doap/licenses/gpl> ;
+	@VERSION@
 	lv2:requiredFeature urid:map ;
 	lv2:optionalFeature lv2:hardRTCapable ;
 	ui:ui @LV2NAME@:@UI@ ;

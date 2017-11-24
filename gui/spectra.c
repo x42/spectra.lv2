@@ -16,8 +16,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define MTR_URI SPR_URI "#"
-#define MTR_GUI "ui"
+#define RTK_URI SPR_URI "#"
+#define RTK_GUI "ui"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -210,7 +210,7 @@ static void ui_disable(LV2UI_Handle handle)
   lv2_atom_forge_set_buffer(&ui->forge, obj_buf, 64);
   LV2_Atom_Forge_Frame frame;
   lv2_atom_forge_frame_time(&ui->forge, 0);
-  LV2_Atom* msg = (LV2_Atom*)lv2_atom_forge_blank(&ui->forge, &frame, 1, ui->uris.ui_off);
+  LV2_Atom* msg = (LV2_Atom*)x_forge_object(&ui->forge, &frame, 1, ui->uris.ui_off);
   lv2_atom_forge_pop(&ui->forge, &frame);
   ui->write(ui->controller, 0, lv2_atom_total_size(msg), ui->uris.atom_eventTransfer, msg);
 }
@@ -224,7 +224,7 @@ static void ui_enable(LV2UI_Handle handle)
   lv2_atom_forge_set_buffer(&ui->forge, obj_buf, 64);
   LV2_Atom_Forge_Frame frame;
   lv2_atom_forge_frame_time(&ui->forge, 0);
-  LV2_Atom* msg = (LV2_Atom*)lv2_atom_forge_blank(&ui->forge, &frame, 1, ui->uris.ui_on);
+  LV2_Atom* msg = (LV2_Atom*)x_forge_object(&ui->forge, &frame, 1, ui->uris.ui_on);
   lv2_atom_forge_pop(&ui->forge, &frame);
   ui->write(ui->controller, 0, lv2_atom_total_size(msg), ui->uris.atom_eventTransfer, msg);
 }
