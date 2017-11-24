@@ -3,6 +3,7 @@
 PREFIX ?= /usr/local
 LV2DIR ?= $(PREFIX)/lib/lv2
 
+STRIP  ?= strip
 CFLAGS ?= -g -Wall -Wno-unused-function
 OPTIMIZATIONS ?= -msse -msse2 -mfpmath=sse -ffast-math -fomit-frame-pointer -O3 -fno-finite-math-only
 
@@ -30,6 +31,7 @@ ifeq ($(UNAME),Darwin)
   PUGL_SRC=$(RW)pugl/pugl_osx.m
   PKG_GL_LIBS=
   GLUILIBS=-framework Cocoa -framework OpenGL -framework CoreFoundation
+  STRIPFLAGS=-u -r -arch all -s $(RW)lv2syms
   EXTENDED_RE=-E
 else
   LV2LDFLAGS=-Wl,-Bstatic -Wl,-Bdynamic -Wl,--as-needed
@@ -39,6 +41,7 @@ else
   PKG_GL_LIBS=glu gl
   GLUILIBS=-lX11
   GLUICFLAGS+=`pkg-config --cflags glu`
+  STRIPFLAGS=-s
   EXTENDED_RE=-r
 endif
 
@@ -194,7 +197,7 @@ $(BUILDDIR)$(LV2NAME)$(LIB_EXT): src/spectra.c src/uris.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c99 \
 	  -o $(BUILDDIR)$(LV2NAME)$(LIB_EXT) src/spectra.c \
 	  -shared $(LV2LDFLAGS) $(LDFLAGS)
-	strip $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
+	$(STRIP) $(STRIPFLAGS) $(BUILDDIR)$(LV2NAME)$(LIB_EXT)
 
 -include $(RW)robtk.mk
 
