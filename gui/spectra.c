@@ -438,7 +438,7 @@ port_event(LV2UI_Handle handle,
    *  Every event message is sent as separate port-event
    */
   if (format == ui->uris.atom_eventTransfer
-      && atom->type == ui->uris.atom_Blank
+      && (atom->type == ui->uris.atom_Blank || atom->type == ui->uris.atom_Object)
       )
   {
     /* cast the buffer to Atom Object */
