@@ -1,6 +1,6 @@
-@LV2NAME@:Mono@URI_SUFFIX@
+@LV2NAME@:Mono
 	a lv2:Plugin, lv2:AnalyserPlugin ;
-	doap:name "Spectr-alanalyzer (Mono)@NAME_SUFFIX@" ;
+	doap:name "Spectr (Mono)" ;
 	lv2:project <http://gareus.org/oss/lv2/@LV2NAME@> ;
 	doap:license <http://usefulinc.com/doap/licenses/gpl> ;
 	@VERSION@
@@ -46,9 +46,9 @@
 	.
 
 
-@LV2NAME@:Stereo@URI_SUFFIX@
+@LV2NAME@:Stereo
 	a lv2:Plugin, lv2:AnalyserPlugin ;
-	doap:name "Spectr-alanalyzer (Stereo)@NAME_SUFFIX@" ;
+	doap:name "Spectr (Stereo)" ;
 	lv2:project <http://gareus.org/oss/lv2/@LV2NAME@> ;
 	doap:license <http://usefulinc.com/doap/licenses/gpl> ;
 	lv2:requiredFeature urid:map ;
