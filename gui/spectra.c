@@ -155,11 +155,15 @@ static void draw_scales(SpectraUI* ui) {
   cairo_set_line_width (cr, 1.25);
   cairo_set_dash(cr, NULL, 0, 0);
 
-  for (int32_t i = 0; i < 31; ++i) {
+  for (int32_t i = 0; i < 41; ++i) {
     if (i < 7 && (i%4)) continue;
     if (i==8) continue;
     const double f_m = pow(2, (i - 17) / 3.) * 1000.0;
     x = ft_x_deflect_bin(&ui->fl, f_m / divisor) * DWIDTH + AWIDTH;
+
+    if (f_m >= ui->rate * .5) {
+      break;
+    }
 
     if (f_m < 1000.0) {
       sprintf(buf, "%0.0fHz", f_m);
