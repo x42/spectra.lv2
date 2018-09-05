@@ -144,7 +144,7 @@ ifeq ($(GLTHREADSYNC), yes)
 endif
 
 ifneq ($(LIC_CFLAGS),)
-  SIGNATURE=, <http:\\/\\/harrisonconsoles.com\\/lv2\\/license\#interface>
+  LV2SIGN=, <http:\\/\\/harrisonconsoles.com\\/lv2\\/license\#interface>
   override CFLAGS += -I$(RW)
 endif
 
@@ -187,7 +187,7 @@ $(BUILDDIR)$(LV2NAME).ttl: lv2ttl/$(LV2NAME).ttl.in lv2ttl/$(LV2NAME).lv2.ttl.in
 ifneq ($(BUILDOPENGL), no)
 	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI_TYPE@/$(UI_TYPE)/;s/@UI_REQ@/$(LV2UIREQ)/" \
 	    lv2ttl/$(LV2NAME).gui.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
-	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI@/ui_gl/g;s/@SIGNATURE@/$(SIGNATURE)/;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
+	sed "s/@LV2NAME@/$(LV2NAME)/g;s/@UI@/ui_gl/g;s/@SIGNATURE@/$(LV2SIGN)/;s/@VERSION@/lv2:microVersion $(LV2MIC) ;lv2:minorVersion $(LV2MIN) ;/g" \
 	  lv2ttl/$(LV2NAME).lv2.ttl.in >> $(BUILDDIR)$(LV2NAME).ttl
 endif
 
