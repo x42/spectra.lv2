@@ -213,8 +213,6 @@ reinitialize_fft (SpectraUI* ui)
 		return;
 	}
 
-	printf ("FFT-SIZE %d\n", fft_size);
-
 	fftx_free (ui->fa);
 	free (ui->p_x);
 	free (ui->p_y);
