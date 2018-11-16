@@ -82,13 +82,22 @@ typedef struct {
 	RobTkXYp*        xyp;
 	cairo_surface_t* ann_power;
 
+	RobWidget*   hbox;
+	RobTkLbl*    lbl_fft;
+	RobTkSelect* sel_fft;
+	RobTkCBtn*   btn_color;
+	RobTkSep*    sep0;
+	RobTkSep*    sep1;
+
 	float    rate;
 	float    ann_rate;
 	uint32_t n_channels;
 	float    min_dB, max_dB, step_dB;
 
 	uint32_t window_size;
-	int      pink_scale;
+	bool     pink_scale;
+
+	bool disable_signals;
 
 	struct FFTAnalysis* fa;
 	struct FFTLogscale  fl;
@@ -254,6 +263,36 @@ ui_enable (LV2UI_Handle handle)
  * WIDGET CALLBACKS
  */
 
+static bool
+cb_set_fft (RobWidget* handle, void* data)
+{
+	SpectraUI*  ui       = (SpectraUI*)data;
+	const float fft_size = robtk_select_get_value (ui->sel_fft);
+	if (ui->window_size == fft_size) {
+		return TRUE;
+	}
+	ui->window_size = fft_size;
+	reinitialize_fft (ui);
+	draw_scales (ui);
+	if (ui->disable_signals)
+		return TRUE;
+	ui->write (ui->controller, SPR_FFTSIZE, sizeof (float), 0, (const void*)&fft_size);
+	return TRUE;
+}
+
+static bool
+cb_set_color (RobWidget* handle, void* data)
+{
+	SpectraUI* ui  = (SpectraUI*)data;
+	float      val = robtk_cbtn_get_active (ui->btn_color) ? 1.0 : 0.0;
+	ui->pink_scale = (val != 0);
+	if (ui->disable_signals) {
+		return TRUE;
+	}
+	ui->write (ui->controller, SPR_WEIGHT, sizeof (float), 0, (const void*)&val);
+	return TRUE;
+}
+
 /******************************************************************************/
 
 /** this callback runs in the "communication" thread of the LV2-host
@@ -289,7 +328,7 @@ update_spectrum (SpectraUI* ui, const uint32_t channel, const size_t n_elem, flo
 	const float aoffs_x   = AWIDTH / WWIDTH;
 	const float min_coeff = pow10f (.1 * ui->min_dB);
 	const float hscale    = rheight / (ui->max_dB - ui->min_dB);
-	const int   pink      = ui->pink_scale;
+	const bool  pink      = ui->pink_scale;
 
 	if (!fftx_run (ui->fa, n_elem, data)) {
 		uint32_t p = 0;
@@ -341,6 +380,14 @@ xydraw_size_allocate (RobWidget* handle, int w, int h)
 	robwidget_set_size (d->rw, w, h);
 }
 
+static void
+xydraw_clip (cairo_t* cr, void* handle)
+{
+	RobTkXYp* d = (RobTkXYp*)(handle);
+	cairo_rectangle (cr, 0, 0, d->w_width, d->w_height);
+	cairo_clip (cr);
+}
+
 static RobWidget*
 toplevel (SpectraUI* ui, void* const top)
 {
@@ -351,16 +398,47 @@ toplevel (SpectraUI* ui, void* const top)
 	ui->xyp = robtk_xydraw_new (800, 400);
 	robwidget_set_size_allocate (ui->xyp->rw, xydraw_size_allocate);
 	robwidget_set_size_request (ui->xyp->rw, xydraw_size_request);
+	robtk_xydraw_set_clip_callback (ui->xyp, xydraw_clip, ui->xyp);
 
 	robtk_xydraw_set_linewidth (ui->xyp, 1.5);
 	robtk_xydraw_set_drawing_mode (ui->xyp, RobTkXY_ymax_zline);
 
+	/* fft bins */
+	ui->lbl_fft = robtk_lbl_new ("FFT:");
+	ui->sel_fft = robtk_select_new ();
+	robtk_select_add_item (ui->sel_fft, 1024, "1024");
+	robtk_select_add_item (ui->sel_fft, 2048, "2048");
+	robtk_select_add_item (ui->sel_fft, 4096, "4096");
+	robtk_select_add_item (ui->sel_fft, 8192, "8192");
+	robtk_select_add_item (ui->sel_fft, 16384, "16384");
+	robtk_select_set_default_item (ui->sel_fft, 2);
+	robtk_select_set_value (ui->sel_fft, 4096);
+	robtk_select_set_callback (ui->sel_fft, cb_set_fft, ui);
+
+	ui->btn_color = robtk_cbtn_new ("N/Octave Bands", GBT_LED_LEFT, false);
+	robtk_cbtn_set_active (ui->btn_color, false);
+	robtk_cbtn_set_callback (ui->btn_color, cb_set_color, ui);
+
+	ui->sep0 = robtk_sep_new (true);
+	ui->sep1 = robtk_sep_new (true);
+	robtk_sep_set_linewidth (ui->sep0, 0);
+	robtk_sep_set_linewidth (ui->sep1, 0);
+
+	ui->hbox = rob_hbox_new (FALSE, 0);
+
+	rob_hbox_child_pack (ui->hbox, robtk_sep_widget (ui->sep0), TRUE, FALSE);
+	rob_hbox_child_pack (ui->hbox, robtk_lbl_widget (ui->lbl_fft), FALSE, FALSE);
+	rob_hbox_child_pack (ui->hbox, robtk_select_widget (ui->sel_fft), FALSE, FALSE);
+	rob_hbox_child_pack (ui->hbox, robtk_cbtn_widget (ui->btn_color), FALSE, FALSE);
+	rob_hbox_child_pack (ui->hbox, robtk_sep_widget (ui->sep1), TRUE, FALSE);
+
 	rob_vbox_child_pack (ui->vbox, robtk_xydraw_widget (ui->xyp), TRUE, TRUE);
+	rob_vbox_child_pack (ui->vbox, ui->hbox, FALSE, TRUE);
 
 	ui->ann_power = NULL;
 	draw_scales (ui);
-	//robtk_xydraw_set_color(ui->xyz, .2, .9, .1, 1.0);
 
+	//robtk_xydraw_set_color(ui->xyz, .2, .9, .1, 1.0);
 	robtk_xydraw_set_surface (ui->xyp, ui->ann_power);
 
 	return ui->vbox;
@@ -423,8 +501,9 @@ instantiate (
 	ui->max_dB  = 6.0;
 	ui->step_dB = 6.0;
 
-	ui->window_size = 4096;
-	ui->pink_scale  = 0;
+	ui->window_size     = 4096;
+	ui->pink_scale      = false;
+	ui->disable_signals = false;
 
 	map_spectra_uris (ui->map, &ui->uris);
 	lv2_atom_forge_init (&ui->forge, ui->map);
@@ -453,6 +532,14 @@ cleanup (LV2UI_Handle handle)
 
 	robtk_xydraw_destroy (ui->xyp);
 	cairo_surface_destroy (ui->ann_power);
+
+	robtk_sep_destroy (ui->sep0);
+	robtk_sep_destroy (ui->sep1);
+	robtk_cbtn_destroy (ui->btn_color);
+	robtk_select_destroy (ui->sel_fft);
+	robtk_lbl_destroy (ui->lbl_fft);
+
+	rob_box_destroy (ui->hbox);
 	rob_box_destroy (ui->vbox);
 	fftx_free (ui->fa);
 	free (ui->p_x);
@@ -494,14 +581,14 @@ port_event (LV2UI_Handle handle,
 		const float val = *((const float*)buffer);
 		switch (port_index) {
 			case SPR_FFTSIZE:
-				if (ui->window_size != val) {
-					ui->window_size = val;
-				}
-				reinitialize_fft (ui);
-				draw_scales (ui);
+				ui->disable_signals = true;
+				robtk_select_set_value (ui->sel_fft, val);
+				ui->disable_signals = false;
 				break;
 			case SPR_WEIGHT:
-				ui->pink_scale = (val != 0);
+				ui->disable_signals = true;
+				robtk_cbtn_set_active (ui->btn_color, val != 0);
+				ui->disable_signals = false;
 				break;
 			default:
 				break;
