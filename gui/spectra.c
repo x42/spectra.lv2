@@ -415,7 +415,7 @@ toplevel (SpectraUI* ui, void* const top)
 	robtk_select_set_value (ui->sel_fft, 4096);
 	robtk_select_set_callback (ui->sel_fft, cb_set_fft, ui);
 
-	ui->btn_color = robtk_cbtn_new ("N/Octave Bands", GBT_LED_LEFT, false);
+	ui->btn_color = robtk_cbtn_new ("1/f (pink noise spectrum)", GBT_LED_LEFT, false);
 	robtk_cbtn_set_active (ui->btn_color, false);
 	robtk_cbtn_set_callback (ui->btn_color, cb_set_color, ui);
 
