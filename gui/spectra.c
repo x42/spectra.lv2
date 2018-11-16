@@ -36,8 +36,8 @@
 #endif
 
 /* widget, window size */
-#define WWIDTH  (800.)
-#define WHEIGHT (400.)
+#define WWIDTH  (ui->xyp->w_width)
+#define WHEIGHT (ui->xyp->w_height)
 
 /* annotation border left/top */
 #define AWIDTH  (35.)
@@ -46,17 +46,6 @@
 /* actual data area size */
 #define DWIDTH  (WWIDTH - AWIDTH)
 #define DHEIGHT (WHEIGHT - AHEIGHT)
-
-/* data <> window scale + offset */
-#define RWIDTH  (DWIDTH / WWIDTH)
-#define RHEIGHT (DHEIGHT / WHEIGHT)
-#define AOFFS_X (AWIDTH / WWIDTH)
-
-/* some local additions to fft.c */
-static float ft_y_power(struct FFTAnalysis *fa, const int b, const float min_dB, const float max_dB) {
-  assert(max_dB > min_dB);
-  return (fftx_power_to_dB(fa->power[b]) - min_dB) / (max_dB - min_dB);
-}
 
 struct FFTLogscale {
   float log_rate;
@@ -267,29 +256,31 @@ static void update_spectrum(SpectraUI* ui, const uint32_t channel, const size_t 
     return;
   }
 
+  if (cairo_image_surface_get_width(ui->ann_power) != WWIDTH || cairo_image_surface_get_height(ui->ann_power) != WHEIGHT) {
+    draw_scales(ui);
+  }
+
+  const float rwidth = DWIDTH / WWIDTH;
+  const float rheight = DHEIGHT / WHEIGHT;
+  const float aoffs_x = AWIDTH / WWIDTH;
+  const float min_coeff = pow10f(.1 * ui->min_dB);
+  const float hscale = rheight / (ui->max_dB - ui->min_dB);
+
   if (!fftx_run(ui->fa, n_elem, data)) {
     uint32_t p = 0;
     uint32_t b = fftx_bins(ui->fa);
-#if 0
     for (uint32_t i = 1; i < b-1; i++) {
-      ui->p_x[p] = ft_x_deflect_bin(&ui->fl, i) * RWIDTH + AOFFS_X;
-      //if (ui->p_x[p] < 36/(float)WWIDTH) continue;
-      ui->p_y[p] = ft_y_power(ui->fa, i, ui->min_dB, ui->max_dB) * RHEIGHT;
-      p++;
-    }
-#else
-    for (uint32_t i = 1; i < b-1; i++) {
-      if (ui->fa->power[i] < .00000000063) { // (-92dB)^2
+      const float ffpow = ui->fa->power[i];
+      if (ffpow < min_coeff) {
 	continue;
-	ui->p_x[p] = ft_x_deflect_bin(&ui->fl, i) * RWIDTH + AOFFS_X;
+	ui->p_x[p] = ft_x_deflect_bin(&ui->fl, i) * rwidth + aoffs_x;
 	ui->p_y[p] = 0;
       } else {
-	ui->p_x[p] = ft_x_deflect_bin(&ui->fl, fftx_freq_at_bin(ui->fa, i) / ui->fa->freq_per_bin) * RWIDTH + AOFFS_X;
-	ui->p_y[p] = ft_y_power(ui->fa, i, ui->min_dB, ui->max_dB) * RHEIGHT;
+	ui->p_x[p] = ft_x_deflect_bin(&ui->fl, fftx_freq_at_bin(ui->fa, i) / ui->fa->freq_per_bin) * rwidth + aoffs_x;
+	ui->p_y[p] = (fftx_power_to_dB (ffpow) - ui->min_dB) * hscale;
       }
       p++;
     }
-#endif
     robtk_xydraw_set_points(ui->xyp, p, ui->p_x, ui->p_y);
   }
 }
@@ -298,9 +289,18 @@ static void update_spectrum(SpectraUI* ui, const uint32_t channel, const size_t 
  * RobWidget
  */
 
-static void plot_position_right(RobWidget *rw, const int pw, const int ph) {
-  rw->area.x = rint((pw - rw->area.width) * 1.0);
-  rw->area.y = rint((ph - rw->area.height) * rw->yalign);
+static void xydraw_size_request(RobWidget* handle, int* w, int* h) {
+  *w = 800;
+  *h = 400;
+}
+
+static void xydraw_size_allocate(RobWidget* handle, int w, int h) {
+  RobTkXYp* d = (RobTkXYp*)GET_HANDLE(handle);
+  d->w_width = w;
+  d->w_height = h;
+  d->map_xw = w;
+  d->map_yh = h;
+  robwidget_set_size(d->rw, w, h);
 }
 
 static RobWidget * toplevel(SpectraUI* ui, void * const top)
@@ -309,13 +309,14 @@ static RobWidget * toplevel(SpectraUI* ui, void * const top)
   robwidget_make_toplevel(ui->vbox, top);
   ROBWIDGET_SETNAME(ui->vbox, "spectra");
 
-  ui->xyp = robtk_xydraw_new(WWIDTH, WHEIGHT);
-  ui->xyp->rw->position_set = plot_position_right;
+  ui->xyp = robtk_xydraw_new(800, 400);
+  robwidget_set_size_allocate(ui->xyp->rw, xydraw_size_allocate);
+  robwidget_set_size_request(ui->xyp->rw, xydraw_size_request);
 
   robtk_xydraw_set_linewidth(ui->xyp, 1.5);
   robtk_xydraw_set_drawing_mode(ui->xyp, RobTkXY_ymax_zline);
 
-  rob_vbox_child_pack(ui->vbox, robtk_xydraw_widget(ui->xyp), FALSE, FALSE);
+  rob_vbox_child_pack(ui->vbox, robtk_xydraw_widget(ui->xyp), TRUE, TRUE);
 
   ui->ann_power = NULL;
   draw_scales(ui);
@@ -325,6 +326,8 @@ static RobWidget * toplevel(SpectraUI* ui, void * const top)
 
   return ui->vbox;
 }
+
+#define LVGL_RESIZEABLE
 
 /******************************************************************************
  * LV2
