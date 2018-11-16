@@ -83,6 +83,9 @@ typedef struct {
   uint32_t n_channels;
   float min_dB, max_dB, step_dB;
 
+  uint32_t window_size;
+  int      pink_scale;
+
   struct FFTAnalysis *fa;
   struct FFTLogscale fl;
   float *p_x, *p_y;
@@ -179,16 +182,25 @@ static void draw_scales(SpectraUI* ui) {
 }
 
 static void reinitialize_fft(SpectraUI* ui) {
+  uint32_t fft_size = MIN (16384, MAX (1024, ui->window_size));
+  fft_size--;
+  fft_size |= fft_size >> 1;
+  fft_size |= fft_size >> 2;
+  fft_size |= fft_size >> 4;
+  fft_size |= fft_size >> 8;
+  fft_size |= fft_size >> 16;
+  fft_size++;
+  fft_size = MIN (16384, fft_size);
+
+  if (ui->fa && ui->fa->window_size == fft_size) {
+    return;
+  }
   fftx_free(ui->fa);
   free(ui->p_x);
   free(ui->p_y);
   ui->fa = (struct FFTAnalysis*) malloc(sizeof(struct FFTAnalysis));
-  uint32_t window_size = 4096;
-  if (ui->rate > 96000) {
-    window_size = 8192;
-  }
-  fftx_init(ui->fa, window_size, ui->rate, 60);
-  fl_init(&ui->fl, window_size, ui->rate);
+  fftx_init(ui->fa, fft_size, ui->rate, 60);
+  fl_init(&ui->fl, fft_size, ui->rate);
   ui->p_x = (float*) malloc(fftx_bins(ui->fa) * sizeof(float));
   ui->p_y = (float*) malloc(fftx_bins(ui->fa) * sizeof(float));
 }
@@ -265,12 +277,22 @@ static void update_spectrum(SpectraUI* ui, const uint32_t channel, const size_t 
   const float aoffs_x = AWIDTH / WWIDTH;
   const float min_coeff = pow10f(.1 * ui->min_dB);
   const float hscale = rheight / (ui->max_dB - ui->min_dB);
+  const int pink = ui->pink_scale;
 
   if (!fftx_run(ui->fa, n_elem, data)) {
     uint32_t p = 0;
     uint32_t b = fftx_bins(ui->fa);
     for (uint32_t i = 1; i < b-1; i++) {
-      const float ffpow = ui->fa->power[i];
+#if 0
+      float ffpow = ui->fa->power[i];
+      if (pink) {
+	float norm = fftx_freq_at_bin(ui->fa, i) / ui->fa->freq_per_bin;
+	if (norm <= 1) { norm = 1; }
+	ffpow *= norm * .5;
+      }
+#else
+      const float ffpow = pink ? (ui->fa->power[i] * i * .5) : ui->fa->power[i];
+#endif
       if (ffpow < min_coeff) {
 	continue;
 	ui->p_x[p] = ft_x_deflect_bin(&ui->fl, i) * rwidth + aoffs_x;
@@ -384,6 +406,9 @@ instantiate(
   ui->max_dB  =  6.0;
   ui->step_dB =  6.0;
 
+  ui->window_size = 4096;
+  ui->pink_scale  =  0;
+
   map_spectra_uris(ui->map, &ui->uris);
   lv2_atom_forge_init(&ui->forge, ui->map);
 
@@ -448,7 +473,24 @@ port_event(LV2UI_Handle handle,
    *  format > 0: message
    *  Every event message is sent as separate port-event
    */
-  if (format == ui->uris.atom_eventTransfer
+  if (format == 0) {
+    const float val = *((const float*)buffer);
+    switch (port_index) {
+      case SPR_FFTSIZE:
+	if (ui->window_size != val) {
+	  ui->window_size = val;
+	}
+	reinitialize_fft(ui);
+	draw_scales(ui);
+	break;
+      case SPR_WEIGHT:
+	ui->pink_scale = (val != 0);
+	break;
+      default:
+	break;
+    }
+  }
+  else if (format == ui->uris.atom_eventTransfer
       && (atom->type == ui->uris.atom_Blank || atom->type == ui->uris.atom_Object)
       )
   {

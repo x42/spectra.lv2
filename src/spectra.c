@@ -54,16 +54,6 @@ typedef struct {
 
 } Spectra;
 
-typedef enum {
-  SPR_CONTROL  = 0,
-  SPR_NOTIFY   = 1,
-  SPR_INPUT0   = 2,
-  SPR_OUTPUT0  = 3,
-  SPR_INPUT1   = 4,
-  SPR_OUTPUT1  = 5,
-} PortIndex;
-
-
 static LV2_Handle
 instantiate(const LV2_Descriptor*     descriptor,
             double                    rate,
@@ -125,14 +115,19 @@ connect_port(LV2_Handle handle,
     case SPR_NOTIFY:
       self->notify = (LV2_Atom_Sequence*)data;
       break;
+    case SPR_INPUT0:
+      self->input[0] = (float*) data;
+      break;
+    case SPR_INPUT1:
+      self->input[1] = (float*) data;
+      break;
+    case SPR_OUTPUT0:
+      self->output[0] = (float*) data;
+      break;
+    case SPR_OUTPUT1:
+      self->output[1] = (float*) data;
+      break;
     default:
-      if (port >= SPR_INPUT0 && port <= SPR_OUTPUT1) {
-	if (port%2) {
-	  self->output[(port/2)-1] = (float*) data;
-	} else {
-	  self->input[(port/2)-1] = (float*) data;
-	}
-      }
       break;
   }
 }
@@ -169,7 +164,7 @@ run(LV2_Handle handle, uint32_t n_samples)
    * all audio-samples and configuration settings */
   if (capacity < size + 160 + self->n_channels * 32) {
     if (!printed_capacity_warning) {
-      fprintf(stderr, "Spectra.lv2 error: LV2 comm-buffersize is insufficient %d/%d bytes.\n",
+      fprintf(stderr, "Spectra.lv2 error: LV2 comm-buffersize is insufficient %d/%ld bytes.\n",
 	  capacity, size + 160 + self->n_channels * 32);
       printed_capacity_warning = true;
     }

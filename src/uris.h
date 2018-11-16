@@ -65,6 +65,17 @@ map_spectra_uris(LV2_URID_Map* map, SpectraLV2URIs* uris) {
 	uris->ui_state           = map->map(map->handle, SPR_URI "#ui_state");
 }
 
+typedef enum {
+  SPR_CONTROL  = 0,
+  SPR_NOTIFY   = 1,
+  SPR_FFTSIZE  = 2,
+  SPR_WEIGHT   = 3,
+  SPR_INPUT0   = 4,
+  SPR_OUTPUT0  = 5,
+  SPR_INPUT1   = 6,
+  SPR_OUTPUT1  = 7,
+} PortIndex;
+
 #define MAX_CHANNELS (2)
 
 #endif
