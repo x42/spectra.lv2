@@ -19,9 +19,9 @@
 
 #define _GNU_SOURCE
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 
 #include "lv2/lv2plug.in/ns/lv2core/lv2.h"
 
@@ -30,168 +30,169 @@
 static bool printed_capacity_warning = false;
 
 typedef struct {
-  /* I/O ports */
-  float* input[MAX_CHANNELS];
-  float* output[MAX_CHANNELS];
-  const LV2_Atom_Sequence* control;
-  LV2_Atom_Sequence* notify;
+	/* I/O ports */
+	float*                   input[MAX_CHANNELS];
+	float*                   output[MAX_CHANNELS];
+	const LV2_Atom_Sequence* control;
+	LV2_Atom_Sequence*       notify;
 
-  /* atom-forge and URI mapping */
-  LV2_URID_Map* map;
-  SpectraLV2URIs uris;
-  LV2_Atom_Forge forge;
-  LV2_Atom_Forge_Frame frame;
+	/* atom-forge and URI mapping */
+	LV2_URID_Map*        map;
+	SpectraLV2URIs       uris;
+	LV2_Atom_Forge       forge;
+	LV2_Atom_Forge_Frame frame;
 
-  uint32_t n_channels;
-  double rate;
+	uint32_t n_channels;
+	double   rate;
 
-  /* the state of the UI is stored here, so that
+	/* the state of the UI is stored here, so that
    * the GUI can be displayed & closed
    * without loosing current settings.
    */
-  bool ui_active;
-  bool send_settings_to_ui;
+	bool ui_active;
+	bool send_settings_to_ui;
 
 } Spectra;
 
 static LV2_Handle
-instantiate(const LV2_Descriptor*     descriptor,
-            double                    rate,
-            const char*               bundle_path,
-            const LV2_Feature* const* features)
+instantiate (const LV2_Descriptor*     descriptor,
+             double                    rate,
+             const char*               bundle_path,
+             const LV2_Feature* const* features)
 {
-  (void) descriptor; /* unused variable */
-  (void) bundle_path; /* unused variable */
+	(void)descriptor;  /* unused variable */
+	(void)bundle_path; /* unused variable */
 
-  Spectra* self = (Spectra*)calloc(1, sizeof(Spectra));
-  if(!self) {
-    return NULL;
-  }
+	Spectra* self = (Spectra*)calloc (1, sizeof (Spectra));
+	if (!self) {
+		return NULL;
+	}
 
-  int i;
-  for (i=0; features[i]; ++i) {
-    if (!strcmp(features[i]->URI, LV2_URID__map)) {
-      self->map = (LV2_URID_Map*)features[i]->data;
-    }
-  }
+	int i;
+	for (i = 0; features[i]; ++i) {
+		if (!strcmp (features[i]->URI, LV2_URID__map)) {
+			self->map = (LV2_URID_Map*)features[i]->data;
+		}
+	}
 
-  if (!self->map) {
-    fprintf(stderr, "Spectra.lv2 error: Host does not support urid:map\n");
-    free(self);
-    return NULL;
-  }
+	if (!self->map) {
+		fprintf (stderr, "Spectra.lv2 error: Host does not support urid:map\n");
+		free (self);
+		return NULL;
+	}
 
-  if (!strncmp(descriptor->URI, SPR_URI "#Mono", 31 + 5)) {
-    self->n_channels = 1;
-  } else if (!strncmp(descriptor->URI, SPR_URI "#Stereo", 31 + 7)) {
-    self->n_channels = 2;
-  } else {
-    free(self);
-    return NULL;
-  }
+	if (!strncmp (descriptor->URI, SPR_URI "#Mono", 31 + 5)) {
+		self->n_channels = 1;
+	} else if (!strncmp (descriptor->URI, SPR_URI "#Stereo", 31 + 7)) {
+		self->n_channels = 2;
+	} else {
+		free (self);
+		return NULL;
+	}
 
-  assert(self->n_channels <= MAX_CHANNELS);
+	assert (self->n_channels <= MAX_CHANNELS);
 
-  self->ui_active = false;
-  self->send_settings_to_ui = false;
-  self->rate = rate;
+	self->ui_active           = false;
+	self->send_settings_to_ui = false;
+	self->rate                = rate;
 
-  lv2_atom_forge_init(&self->forge, self->map);
-  map_spectra_uris(self->map, &self->uris);
-  return (LV2_Handle)self;
+	lv2_atom_forge_init (&self->forge, self->map);
+	map_spectra_uris (self->map, &self->uris);
+	return (LV2_Handle)self;
 }
 
 static void
-connect_port(LV2_Handle handle,
-             uint32_t   port,
-             void*      data)
+connect_port (LV2_Handle handle,
+              uint32_t   port,
+              void*      data)
 {
-  Spectra* self = (Spectra*)handle;
+	Spectra* self = (Spectra*)handle;
 
-  switch ((PortIndex)port) {
-    case SPR_CONTROL:
-      self->control = (const LV2_Atom_Sequence*)data;
-      break;
-    case SPR_NOTIFY:
-      self->notify = (LV2_Atom_Sequence*)data;
-      break;
-    case SPR_INPUT0:
-      self->input[0] = (float*) data;
-      break;
-    case SPR_INPUT1:
-      self->input[1] = (float*) data;
-      break;
-    case SPR_OUTPUT0:
-      self->output[0] = (float*) data;
-      break;
-    case SPR_OUTPUT1:
-      self->output[1] = (float*) data;
-      break;
-    default:
-      break;
-  }
+	switch ((PortIndex)port) {
+		case SPR_CONTROL:
+			self->control = (const LV2_Atom_Sequence*)data;
+			break;
+		case SPR_NOTIFY:
+			self->notify = (LV2_Atom_Sequence*)data;
+			break;
+		case SPR_INPUT0:
+			self->input[0] = (float*)data;
+			break;
+		case SPR_INPUT1:
+			self->input[1] = (float*)data;
+			break;
+		case SPR_OUTPUT0:
+			self->output[0] = (float*)data;
+			break;
+		case SPR_OUTPUT1:
+			self->output[1] = (float*)data;
+			break;
+		default:
+			break;
+	}
 }
 
 /** forge atom-vector of raw data */
-static void tx_rawaudio(LV2_Atom_Forge *forge, SpectraLV2URIs *uris,
-    const int32_t channel, const size_t n_samples, void *data)
+static void
+tx_rawaudio (LV2_Atom_Forge* forge, SpectraLV2URIs* uris,
+             const int32_t channel, const size_t n_samples, void* data)
 {
-  LV2_Atom_Forge_Frame frame;
-  /* forge container object of type 'rawaudio' */
-  lv2_atom_forge_frame_time(forge, 0);
-  x_forge_object(forge, &frame, 1, uris->rawaudio);
+	LV2_Atom_Forge_Frame frame;
+	/* forge container object of type 'rawaudio' */
+	lv2_atom_forge_frame_time (forge, 0);
+	x_forge_object (forge, &frame, 1, uris->rawaudio);
 
-  /* add integer attribute 'channelid' */
-  lv2_atom_forge_property_head(forge, uris->channelid, 0);
-  lv2_atom_forge_int(forge, channel);
+	/* add integer attribute 'channelid' */
+	lv2_atom_forge_property_head (forge, uris->channelid, 0);
+	lv2_atom_forge_int (forge, channel);
 
-  /* add vector of floats raw 'audiodata' */
-  lv2_atom_forge_property_head(forge, uris->audiodata, 0);
-  lv2_atom_forge_vector(forge, sizeof(float), uris->atom_Float, n_samples, data);
+	/* add vector of floats raw 'audiodata' */
+	lv2_atom_forge_property_head (forge, uris->audiodata, 0);
+	lv2_atom_forge_vector (forge, sizeof (float), uris->atom_Float, n_samples, data);
 
-  /* close off atom-object */
-  lv2_atom_forge_pop(forge, &frame);
+	/* close off atom-object */
+	lv2_atom_forge_pop (forge, &frame);
 }
 
 static void
-run(LV2_Handle handle, uint32_t n_samples)
+run (LV2_Handle handle, uint32_t n_samples)
 {
-  Spectra* self = (Spectra*)handle;
-  const size_t size = (sizeof(float) * n_samples + 64) * self->n_channels;
-  const uint32_t capacity = self->notify->atom.size;
+	Spectra*       self     = (Spectra*)handle;
+	const size_t   size     = (sizeof (float) * n_samples + 64) * self->n_channels;
+	const uint32_t capacity = self->notify->atom.size;
 
-  /* check if atom-port buffer is large enough to hold
+	/* check if atom-port buffer is large enough to hold
    * all audio-samples and configuration settings */
-  if (capacity < size + 160 + self->n_channels * 32) {
-    if (!printed_capacity_warning) {
-      fprintf(stderr, "Spectra.lv2 error: LV2 comm-buffersize is insufficient %d/%ld bytes.\n",
-	  capacity, size + 160 + self->n_channels * 32);
-      printed_capacity_warning = true;
-    }
-    return;
-  }
+	if (capacity < size + 160 + self->n_channels * 32) {
+		if (!printed_capacity_warning) {
+			fprintf (stderr, "Spectra.lv2 error: LV2 comm-buffersize is insufficient %d/%ld bytes.\n",
+			         capacity, size + 160 + self->n_channels * 32);
+			printed_capacity_warning = true;
+		}
+		return;
+	}
 
-  /* prepare forge buffer and initialize atom-sequence */
-  lv2_atom_forge_set_buffer(&self->forge, (uint8_t*)self->notify, capacity);
-  lv2_atom_forge_sequence_head(&self->forge, &self->frame, 0);
+	/* prepare forge buffer and initialize atom-sequence */
+	lv2_atom_forge_set_buffer (&self->forge, (uint8_t*)self->notify, capacity);
+	lv2_atom_forge_sequence_head (&self->forge, &self->frame, 0);
 
-  /* Send settings to UI */
-  if (self->send_settings_to_ui && self->ui_active) {
-    self->send_settings_to_ui = false;
-    /* forge container object of type 'ui_state' */
-    LV2_Atom_Forge_Frame frame;
-    lv2_atom_forge_frame_time(&self->forge, 0);
-    x_forge_object(&self->forge, &frame, 1, self->uris.ui_state);
-    /* forge attributes for 'ui_state' */
-    lv2_atom_forge_property_head(&self->forge, self->uris.samplerate, 0);
-    lv2_atom_forge_float(&self->forge, self->rate);
+	/* Send settings to UI */
+	if (self->send_settings_to_ui && self->ui_active) {
+		self->send_settings_to_ui = false;
+		/* forge container object of type 'ui_state' */
+		LV2_Atom_Forge_Frame frame;
+		lv2_atom_forge_frame_time (&self->forge, 0);
+		x_forge_object (&self->forge, &frame, 1, self->uris.ui_state);
+		/* forge attributes for 'ui_state' */
+		lv2_atom_forge_property_head (&self->forge, self->uris.samplerate, 0);
+		lv2_atom_forge_float (&self->forge, self->rate);
 
-    /* close-off frame */
-    lv2_atom_forge_pop(&self->forge, &frame);
-  }
+		/* close-off frame */
+		lv2_atom_forge_pop (&self->forge, &frame);
+	}
 
-  /* Process incoming events from GUI */
-  if (self->control) {
+	/* Process incoming events from GUI */
+	if (self->control) {
 #if 0
     printf("CTRL size %d\n", (self->control)->atom.size);
     for(uint8_t xx=0; xx < (self->control)->atom.size + 8; ++xx) {
@@ -200,78 +201,81 @@ run(LV2_Handle handle, uint32_t n_samples)
     }
     printf("\n");
 #endif
-    LV2_Atom_Event* ev = lv2_atom_sequence_begin(&(self->control)->body);
-    /* for each message from UI... */
-    while(!lv2_atom_sequence_is_end(&(self->control)->body, (self->control)->atom.size, ev)) {
-      /* .. only look at atom-events.. */
-      if (ev->body.type == self->uris.atom_Blank || ev->body.type == self->uris.atom_Object) {
-	const LV2_Atom_Object* obj = (LV2_Atom_Object*)&ev->body;
-	//printf("BLANK recv.. %x %x %x %x\n", obj->atom.size, obj->atom.type, obj->body.id, obj->body.otype);
-	/* interpret atom-objects: */
-	if (obj->body.otype == self->uris.ui_on) {
-	  /* UI was activated */
-	  self->ui_active = true;
-	  self->send_settings_to_ui = true;
-	} else if (obj->body.otype == self->uris.ui_off) {
-	  /* UI was closed */
-	  self->ui_active = false;
+		LV2_Atom_Event* ev = lv2_atom_sequence_begin (&(self->control)->body);
+		/* for each message from UI... */
+		while (!lv2_atom_sequence_is_end (&(self->control)->body, (self->control)->atom.size, ev)) {
+			/* .. only look at atom-events.. */
+			if (ev->body.type == self->uris.atom_Blank || ev->body.type == self->uris.atom_Object) {
+				const LV2_Atom_Object* obj = (LV2_Atom_Object*)&ev->body;
+				//printf("BLANK recv.. %x %x %x %x\n", obj->atom.size, obj->atom.type, obj->body.id, obj->body.otype);
+				/* interpret atom-objects: */
+				if (obj->body.otype == self->uris.ui_on) {
+					/* UI was activated */
+					self->ui_active           = true;
+					self->send_settings_to_ui = true;
+				} else if (obj->body.otype == self->uris.ui_off) {
+					/* UI was closed */
+					self->ui_active = false;
+				}
+			}
+			ev = lv2_atom_sequence_next (ev);
+		}
 	}
-      }
-      ev = lv2_atom_sequence_next(ev);
-    }
-  }
 
-  /* process audio data */
-  for (uint32_t c = 0; c < self->n_channels; ++c) {
-    if (self->ui_active) {
-      /* if UI is active, send raw audio data to UI */
-      tx_rawaudio(&self->forge, &self->uris, c, n_samples, self->input[c]);
-    }
-    /* if not processing in-place, forward audio */
-    if (self->input[c] != self->output[c]) {
-      memcpy(self->output[c], self->input[c], sizeof(float) * n_samples);
-    }
-  }
+	/* process audio data */
+	for (uint32_t c = 0; c < self->n_channels; ++c) {
+		if (self->ui_active) {
+			/* if UI is active, send raw audio data to UI */
+			tx_rawaudio (&self->forge, &self->uris, c, n_samples, self->input[c]);
+		}
+		/* if not processing in-place, forward audio */
+		if (self->input[c] != self->output[c]) {
+			memcpy (self->output[c], self->input[c], sizeof (float) * n_samples);
+		}
+	}
 
-  /* close off atom-sequence */
-  lv2_atom_forge_pop(&self->forge, &self->frame);
+	/* close off atom-sequence */
+	lv2_atom_forge_pop (&self->forge, &self->frame);
 }
 
 static void
-cleanup(LV2_Handle handle)
+cleanup (LV2_Handle handle)
 {
-  free(handle);
+	free (handle);
 }
 
+/* clang-format off */
+#define mkdesc(ID, NAME)                         \
+  static const LV2_Descriptor descriptor##ID = { \
+    SPR_URI NAME,                                \
+    instantiate,                                 \
+    connect_port,                                \
+    NULL,                                        \
+    run,                                         \
+    NULL,                                        \
+    cleanup,                                     \
+    NULL                                         \
+  };
+/* clang-format on */
 
-#define mkdesc(ID, NAME) \
-static const LV2_Descriptor descriptor ## ID = { \
-  SPR_URI NAME,  \
-  instantiate,   \
-  connect_port,  \
-  NULL,          \
-  run,           \
-  NULL,          \
-  cleanup,       \
-  NULL           \
-};
+mkdesc (0, "#Mono")
+    mkdesc (1, "#Mono_gtk")
+        mkdesc (2, "#Stereo")
+            mkdesc (3, "#Stereo_gtk")
 
-mkdesc(0, "#Mono")
-mkdesc(1, "#Mono_gtk")
-mkdesc(2, "#Stereo")
-mkdesc(3, "#Stereo_gtk")
-
-LV2_SYMBOL_EXPORT
-const LV2_Descriptor*
-lv2_descriptor(uint32_t index)
+                LV2_SYMBOL_EXPORT
+    const LV2_Descriptor* lv2_descriptor (uint32_t index)
 {
-  switch (index) {
-    case  0: return &descriptor0;
-    case  1: return &descriptor1;
-    case  2: return &descriptor2;
-    case  3: return &descriptor3;
-    default: return NULL;
-  }
+	switch (index) {
+		case 0:
+			return &descriptor0;
+		case 1:
+			return &descriptor1;
+		case 2:
+			return &descriptor2;
+		case 3:
+			return &descriptor3;
+		default:
+			return NULL;
+	}
 }
-
-/* vi:set ts=8 sts=2 sw=2: */

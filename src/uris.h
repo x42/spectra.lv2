@@ -49,31 +49,32 @@ typedef struct {
 } SpectraLV2URIs;
 
 static inline void
-map_spectra_uris(LV2_URID_Map* map, SpectraLV2URIs* uris) {
-	uris->atom_Blank         = map->map(map->handle, LV2_ATOM__Blank);
-	uris->atom_Object        = map->map(map->handle, LV2_ATOM__Object);
-	uris->atom_Vector        = map->map(map->handle, LV2_ATOM__Vector);
-	uris->atom_Float         = map->map(map->handle, LV2_ATOM__Float);
-	uris->atom_Int           = map->map(map->handle, LV2_ATOM__Int);
-	uris->atom_eventTransfer = map->map(map->handle, LV2_ATOM__eventTransfer);
-	uris->rawaudio           = map->map(map->handle, SPR_URI "#rawaudio");
-	uris->audiodata          = map->map(map->handle, SPR_URI "#audiodata");
-	uris->channelid          = map->map(map->handle, SPR_URI "#channelid");
-	uris->samplerate         = map->map(map->handle, SPR_URI "#samplerate");
-	uris->ui_on              = map->map(map->handle, SPR_URI "#ui_on");
-	uris->ui_off             = map->map(map->handle, SPR_URI "#ui_off");
-	uris->ui_state           = map->map(map->handle, SPR_URI "#ui_state");
+map_spectra_uris (LV2_URID_Map* map, SpectraLV2URIs* uris)
+{
+	uris->atom_Blank         = map->map (map->handle, LV2_ATOM__Blank);
+	uris->atom_Object        = map->map (map->handle, LV2_ATOM__Object);
+	uris->atom_Vector        = map->map (map->handle, LV2_ATOM__Vector);
+	uris->atom_Float         = map->map (map->handle, LV2_ATOM__Float);
+	uris->atom_Int           = map->map (map->handle, LV2_ATOM__Int);
+	uris->atom_eventTransfer = map->map (map->handle, LV2_ATOM__eventTransfer);
+	uris->rawaudio           = map->map (map->handle, SPR_URI "#rawaudio");
+	uris->audiodata          = map->map (map->handle, SPR_URI "#audiodata");
+	uris->channelid          = map->map (map->handle, SPR_URI "#channelid");
+	uris->samplerate         = map->map (map->handle, SPR_URI "#samplerate");
+	uris->ui_on              = map->map (map->handle, SPR_URI "#ui_on");
+	uris->ui_off             = map->map (map->handle, SPR_URI "#ui_off");
+	uris->ui_state           = map->map (map->handle, SPR_URI "#ui_state");
 }
 
 typedef enum {
-  SPR_CONTROL  = 0,
-  SPR_NOTIFY   = 1,
-  SPR_FFTSIZE  = 2,
-  SPR_WEIGHT   = 3,
-  SPR_INPUT0   = 4,
-  SPR_OUTPUT0  = 5,
-  SPR_INPUT1   = 6,
-  SPR_OUTPUT1  = 7,
+	SPR_CONTROL = 0,
+	SPR_NOTIFY  = 1,
+	SPR_FFTSIZE = 2,
+	SPR_WEIGHT  = 3,
+	SPR_INPUT0  = 4,
+	SPR_OUTPUT0 = 5,
+	SPR_INPUT1  = 6,
+	SPR_OUTPUT1 = 7,
 } PortIndex;
 
 #define MAX_CHANNELS (2)
