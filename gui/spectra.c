@@ -324,7 +324,7 @@ update_spectrum (SpectraUI* ui, const uint32_t channel, const size_t n_elem, flo
 	const float rwidth    = DWIDTH / WWIDTH;
 	const float rheight   = DHEIGHT / WHEIGHT;
 	const float aoffs_x   = AWIDTH / WWIDTH;
-	const float min_coeff = pow10f (.1 * ui->min_dB);
+	const float min_coeff = powf (10.f, .1f * ui->min_dB);
 	const float hscale    = rheight / (ui->max_dB - ui->min_dB);
 	const bool  pink      = ui->pink_scale;
 
