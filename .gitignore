@@ -1,5 +1,7 @@
 /build
-/doc
+/x42
+*.dSYM
+
 *.swp
 cscope.*
 tags
