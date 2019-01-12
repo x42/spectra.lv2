@@ -33,7 +33,7 @@ static bool printed_capacity_warning = false;
 
 typedef struct {
 	/* I/O ports */
-	float*                   input[MAX_CHANNELS];
+	float const*             input[MAX_CHANNELS];
 	float*                   output[MAX_CHANNELS];
 	const LV2_Atom_Sequence* control;
 	LV2_Atom_Sequence*       notify;
@@ -85,8 +85,6 @@ instantiate (const LV2_Descriptor*     descriptor,
 
 	if (!strncmp (descriptor->URI, SPR_URI "#Mono", 31 + 5)) {
 		self->n_channels = 1;
-	} else if (!strncmp (descriptor->URI, SPR_URI "#Stereo", 31 + 7)) {
-		self->n_channels = 2;
 	} else {
 		free (self);
 		return NULL;
@@ -117,19 +115,15 @@ connect_port (LV2_Handle handle,
 		case SPR_NOTIFY:
 			self->notify = (LV2_Atom_Sequence*)data;
 			break;
-		case SPR_INPUT0:
-			self->input[0] = (float*)data;
-			break;
-		case SPR_INPUT1:
-			self->input[1] = (float*)data;
-			break;
-		case SPR_OUTPUT0:
-			self->output[0] = (float*)data;
-			break;
-		case SPR_OUTPUT1:
-			self->output[1] = (float*)data;
-			break;
 		default:
+			if (port > SPR_WINDOW && port <= SPR_WINDOW + 2 * MAX_CHANNELS) {
+				int chn = (port - SPR_WINDOW - 1) / 2;
+				if (port & 1) {
+					self->input[chn] = (float const*)data;
+				} else {
+					self->output[chn] = (float*)data;
+				}
+			}
 			break;
 	}
 }
@@ -137,7 +131,7 @@ connect_port (LV2_Handle handle,
 /** forge atom-vector of raw data */
 static void
 tx_rawaudio (LV2_Atom_Forge* forge, SpectraLV2URIs* uris,
-             const int32_t channel, const size_t n_samples, void* data)
+             const int32_t channel, const size_t n_samples, void const* data)
 {
 	LV2_Atom_Forge_Frame frame;
 	/* forge container object of type 'rawaudio' */

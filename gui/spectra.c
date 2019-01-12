@@ -85,6 +85,7 @@ typedef struct {
 	RobWidget*   hbox;
 	RobTkLbl*    lbl_fft;
 	RobTkSelect* sel_fft;
+	RobTkSelect* sel_window;
 	RobTkCBtn*   btn_color;
 	RobTkSep*    sep0;
 	RobTkSep*    sep1;
@@ -96,12 +97,13 @@ typedef struct {
 
 	uint32_t window_size;
 	bool     pink_scale;
+	window_t window_fun;
 
 	bool disable_signals;
 
 	struct FFTAnalysis* fa;
 	struct FFTLogscale  fl;
-	float *             p_x, *p_y;
+	float*              p_x, *p_y;
 
 } SpectraUI;
 
@@ -283,13 +285,31 @@ cb_set_color (RobWidget* handle, void* data)
 {
 	SpectraUI* ui  = (SpectraUI*)data;
 	float      val = robtk_cbtn_get_active (ui->btn_color) ? 1.0 : 0.0;
-	ui->pink_scale = (val != 0);
+	ui->pink_scale = val > 0;
 	if (ui->disable_signals) {
 		return TRUE;
 	}
 	ui->write (ui->controller, SPR_WEIGHT, sizeof (float), 0, (const void*)&val);
 	return TRUE;
 }
+
+static bool
+cb_set_window (RobWidget* handle, void* data)
+{
+	SpectraUI*  ui       = (SpectraUI*)data;
+	const float val = robtk_select_get_value (ui->sel_window);
+	const window_t wf = (window_t) val;
+	if (ui->window_fun == wf) {
+		return TRUE;
+	}
+	ui->window_fun = wf;
+	if (ui->disable_signals) {
+		return TRUE;
+	}
+	ui->write (ui->controller, SPR_WINDOW, sizeof (float), 0, (const void*)&val);
+	return TRUE;
+}
+
 
 /******************************************************************************/
 
@@ -308,12 +328,7 @@ update_spectrum (SpectraUI* ui, const uint32_t channel, const size_t n_elem, flo
 	/* this callback runs in the "communication" thread of the LV2-host
    * usually a g_timeout() at ~25fps
    */
-	if (channel > ui->n_channels) {
-		return;
-	}
-
-	/* TODO multi-channel */
-	if (channel != 0) {
+	if (channel > ui->n_channels || channel != 0) {
 		return;
 	}
 
@@ -327,6 +342,8 @@ update_spectrum (SpectraUI* ui, const uint32_t channel, const size_t n_elem, flo
 	const float min_coeff = powf (10.f, .1f * ui->min_dB);
 	const float hscale    = rheight / (ui->max_dB - ui->min_dB);
 	const bool  pink      = ui->pink_scale;
+
+	fftx_set_window (ui->fa, ui->window_fun);
 
 	if (!fftx_run (ui->fa, n_elem, data)) {
 		uint32_t p = 0;
@@ -417,6 +434,19 @@ toplevel (SpectraUI* ui, void* const top)
 	robtk_cbtn_set_active (ui->btn_color, false);
 	robtk_cbtn_set_callback (ui->btn_color, cb_set_color, ui);
 
+	ui->sel_window = robtk_select_new ();
+	robtk_select_add_item (ui->sel_window, W_HANN, "Hann");
+#if 0
+	robtk_select_add_item (ui->sel_window, W_HAMMMIN, "Hamming");
+	robtk_select_add_item (ui->sel_window, W_NUTTALL, "Nuttall");
+	robtk_select_add_item (ui->sel_window, W_BLACKMAN_NUTTALL, "Blackman-Nuttall");
+#endif
+	robtk_select_add_item (ui->sel_window, W_BLACKMAN_HARRIS, "Blackman-Harris");
+	robtk_select_add_item (ui->sel_window, W_FLAT_TOP, "Flat Top");
+	robtk_select_set_default_item (ui->sel_window, 0);
+	robtk_select_set_item (ui->sel_window, 0);
+	robtk_select_set_callback (ui->sel_window, cb_set_window, ui);
+
 	ui->sep0 = robtk_sep_new (true);
 	ui->sep1 = robtk_sep_new (true);
 	robtk_sep_set_linewidth (ui->sep0, 0);
@@ -428,6 +458,7 @@ toplevel (SpectraUI* ui, void* const top)
 	rob_hbox_child_pack (ui->hbox, robtk_lbl_widget (ui->lbl_fft), FALSE, FALSE);
 	rob_hbox_child_pack (ui->hbox, robtk_select_widget (ui->sel_fft), FALSE, FALSE);
 	rob_hbox_child_pack (ui->hbox, robtk_cbtn_widget (ui->btn_color), FALSE, FALSE);
+	rob_hbox_child_pack (ui->hbox, robtk_select_widget (ui->sel_window), FALSE, FALSE);
 	rob_hbox_child_pack (ui->hbox, robtk_sep_widget (ui->sep1), TRUE, FALSE);
 
 	rob_vbox_child_pack (ui->vbox, robtk_xydraw_widget (ui->xyp), TRUE, TRUE);
@@ -471,8 +502,6 @@ instantiate (
 
 	if (!strncmp (plugin_uri, SPR_URI "#Mono", 31 + 5)) {
 		ui->n_channels = 1;
-	} else if (!strncmp (plugin_uri, SPR_URI "#Stereo", 31 + 7)) {
-		ui->n_channels = 2;
 	} else {
 		free (ui);
 		return NULL;
@@ -501,6 +530,7 @@ instantiate (
 
 	ui->window_size     = 4096;
 	ui->pink_scale      = false;
+	ui->window_fun      = W_HANN;
 	ui->disable_signals = false;
 
 	map_spectra_uris (ui->map, &ui->uris);
@@ -535,6 +565,7 @@ cleanup (LV2UI_Handle handle)
 	robtk_sep_destroy (ui->sep1);
 	robtk_cbtn_destroy (ui->btn_color);
 	robtk_select_destroy (ui->sel_fft);
+	robtk_select_destroy (ui->sel_window);
 	robtk_lbl_destroy (ui->lbl_fft);
 
 	rob_box_destroy (ui->hbox);
@@ -585,7 +616,12 @@ port_event (LV2UI_Handle handle,
 				break;
 			case SPR_WEIGHT:
 				ui->disable_signals = true;
-				robtk_cbtn_set_active (ui->btn_color, val != 0);
+				robtk_cbtn_set_active (ui->btn_color, val > 0);
+				ui->disable_signals = false;
+				break;
+			case SPR_WINDOW:
+				ui->disable_signals = true;
+				robtk_select_set_value (ui->sel_window, val);
 				ui->disable_signals = false;
 				break;
 			default:
@@ -600,8 +636,8 @@ port_event (LV2UI_Handle handle,
 		    /* handle raw-audio data objects */
 		    obj->body.otype == ui->uris.rawaudio
 		    /* retrieve properties from object and
-	 * check that there the [here] two required properties are set.. */
-		    && 2 == lv2_atom_object_get (obj, ui->uris.channelid, &a0, ui->uris.audiodata, &a1, NULL)
+				 * check that there the [here] two required properties are set.. */
+				&& 2 == lv2_atom_object_get (obj, ui->uris.channelid, &a0, ui->uris.audiodata, &a1, NULL)
 		    /* ..and non-null.. */
 		    && a0 && a1
 		    /* ..and match the expected type */
@@ -614,7 +650,7 @@ port_event (LV2UI_Handle handle,
 			/* check if atom is indeed a vector of the expected type*/
 			if (vof->atom.type == ui->uris.atom_Float) {
 				/* get number of elements in vector
-	 * = (raw 8bit data-length - header-length) / sizeof(expected data type:float) */
+				 * = (raw 8bit data-length - header-length) / sizeof(expected data type:float) */
 				const size_t n_elem = (a1->size - sizeof (LV2_Atom_Vector_Body)) / vof->atom.size;
 				/* typecast, dereference pointer to vector */
 				const float* data = (float*)LV2_ATOM_BODY (&vof->atom);
@@ -625,8 +661,8 @@ port_event (LV2UI_Handle handle,
 		    /* handle 'state/settings' data object */
 		    obj->body.otype == ui->uris.ui_state
 		    /* retrieve properties from object and
-	 * check that there the [here] three required properties are set.. */
-		    && 1 == lv2_atom_object_get (obj, ui->uris.samplerate, &a0, NULL)
+				 * check that there the [here] three required properties are set.. */
+				&& 1 == lv2_atom_object_get (obj, ui->uris.samplerate, &a0, NULL)
 		    /* ..and non-null.. */
 		    && a0
 		    /* ..and match the expected type */

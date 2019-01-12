@@ -71,12 +71,11 @@ typedef enum {
 	SPR_NOTIFY  = 1,
 	SPR_FFTSIZE = 2,
 	SPR_WEIGHT  = 3,
-	SPR_INPUT0  = 4,
-	SPR_OUTPUT0 = 5,
-	SPR_INPUT1  = 6,
-	SPR_OUTPUT1 = 7,
+	SPR_WINDOW  = 4,
+	SPR_INPUT0  = 5,
+	SPR_OUTPUT0 = 6,
 } PortIndex;
 
-#define MAX_CHANNELS (2)
+#define MAX_CHANNELS (1)
 
 #endif
