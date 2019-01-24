@@ -15,7 +15,7 @@ STRIP?= strip
 BUILDOPENGL?=yes
 BUILDJACKAPP?=yes
 
-spectr_VERSION ?= $(shell git describe --tags HEAD | sed 's/-g.*$$//;s/^v//' || echo "LV2")
+spectra_VERSION ?= $(shell git describe --tags HEAD | sed 's/-g.*$$//;s/^v//' || echo "LV2")
 RW ?= robtk/
 
 
@@ -96,7 +96,7 @@ UITTL=ui:ui $(LV2NAME):ui_gl ;
 
 ###############################################################################
 # extract versions
-LV2VERSION=$(spectr_VERSION)
+LV2VERSION=$(spectra_VERSION)
 include git2lv2.mk
 
 ###############################################################################
@@ -156,7 +156,7 @@ GLUICFLAGS+=-DHAVE_IDLE_IFACE
 LV2UIREQ+=lv2:requiredFeature ui:idleInterface; lv2:extensionData ui:idleInterface;
 
 # add library dependent flags and libs
-override CFLAGS += $(OPTIMIZATIONS) -DVERSION="\"$(spectr_VERSION)\""
+override CFLAGS += $(OPTIMIZATIONS) -DVERSION="\"$(spectra_VERSION)\""
 override CFLAGS += `$(PKG_CONFIG) --cflags lv2`
 ifeq ($(XWIN),)
 override CFLAGS += -fPIC -fvisibility=hidden
@@ -264,7 +264,7 @@ ifneq ($(BUILDOPENGL), no)
 endif
 ifneq ($(BUILDJACKAPP), no)
 	install -d $(DESTDIR)$(BINDIR)
-	install -m755 $(APPBLD)x42-dpl$(EXE_EXT) $(DESTDIR)$(BINDIR)
+	install -m755 $(APPBLD)x42-spectr$(EXE_EXT) $(DESTDIR)$(BINDIR)
 endif
 
 uninstall-bin:
