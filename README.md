@@ -12,7 +12,7 @@ Compiling spectr.lv2 requires the LV2 SDK, jack-headers, gnu-make, a c++-compile
 libpango, libcairo and openGL (sometimes called: glu, glx, mesa).
 
 ```bash
-  git clone git://github.com/x42/spectra.lv2.git
+  git clone https://github.com/x42/spectra.lv2.git
   cd spectra.lv2
   make submodules
   make
